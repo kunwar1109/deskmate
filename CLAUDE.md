@@ -36,7 +36,8 @@ How to work with Rishabh:
 
 ## Current status
 
-**Phase 1 (core RAG) runs end to end against live Atlas + Gemini.** All five README test questions pass (three cited answers, two correct handoffs). Fixed along the way: free-tier 429s now fail fast with 503/504 instead of hanging; chat model switched to Flash-Lite for speed and quota; chat logs include `topScore` and `handoffReason` even on handoff. Next: Phase 2.
+**Phase 1 (core RAG) runs end to end against live Atlas + Gemini.** All five README test questions pass (three cited answers, two correct handoffs). Fixed along the way: free-tier 429s now fail fast with 503/504 instead of hanging; chat model switched to Flash-Lite for speed and quota; chat logs include `topScore` and `handoffReason` even on handoff. 
+**Phase 2 step 1 (accounts + login) is done** and verified with curl: signup/login/logout/me, `/api/documents` and `/api/chat` behind `requireAuth`, tenant isolation checked with two accounts. Known: Atlas indexes new chunks a few seconds after insert, so a question asked instantly after upload finds nothing; the ingestion worker (step 2) should only mark a document `ready` once it is searchable.
 
 Observed so far: Gemini similarity scores bunch together (on-topic ~0.82, off-topic ~0.81 on the sample doc), so `MIN_RELEVANCE` alone can't separate them; guardrail 2 (`NO_ANSWER`) does most of the work. Tune with more docs and logs.
 
@@ -49,7 +50,10 @@ apps/api/
   src/lib/embed.ts          embedDocuments (RETRIEVAL_DOCUMENT), embedQuery (RETRIEVAL_QUERY)
   src/lib/retrieve.ts       $vectorSearch top 5, filtered by workspaceId, returns score
   src/lib/answer.ts         relevance guardrail, grounded generation with [n] citations, NO_ANSWER -> handoff
-  src/lib/workspace.ts      returns DEV_WORKSPACE_ID (stub until phase 2 auth)
+  src/lib/auth.ts           argon2id hashing, HS256 JWT (jose) in httpOnly cookie, requireAuth, getAuth
+  src/lib/errors.ts         HttpError / UnauthorizedError / ConflictError, mapped in index.ts
+  src/lib/workspace.ts      getWorkspaceId(req) from the verified session
+  src/routes/auth.ts        POST signup (transaction: user + workspace + owner membership), login, logout; GET me
   src/routes/documents.ts   POST / (upload + ingest), GET /, DELETE /:id
   src/routes/chat.ts        POST / { question } -> { answer, sources, handoff, usage, latencyMs }
   scripts/create-indexes.ts creates collections, indexes, vector index; waits until queryable
