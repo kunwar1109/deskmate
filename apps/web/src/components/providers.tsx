@@ -3,6 +3,7 @@
 import { QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
+import { RealtimeConnection } from "@/components/realtime";
 import { Toaster } from "@/components/ui/sonner";
 import { ApiRequestError } from "@/lib/api";
 
@@ -29,6 +30,7 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       {children}
+      <RealtimeConnection />
       <Toaster richColors position="bottom-right" />
     </QueryClientProvider>
   );
