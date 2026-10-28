@@ -32,5 +32,4 @@ export const env = parsed.data;
 export const EMBEDDING_MODEL = 'gemini-embedding-001';
 export const EMBEDDING_DIMENSIONS = 768; // reduced from 3072 to save storage; quality loss is small
 export const VECTOR_INDEX_NAME = 'chunks_vector_index';
-export const SESSION_COOKIE = 'deskmate_session';
 export const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days

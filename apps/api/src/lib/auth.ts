@@ -1,7 +1,8 @@
+import { SESSION_COOKIE } from '@deskmate/shared/auth';
 import argon2 from 'argon2';
 import type { CookieOptions, Request, RequestHandler, Response } from 'express';
 import { jwtVerify, SignJWT } from 'jose';
-import { env, SESSION_COOKIE, SESSION_TTL_SECONDS } from '../config.js';
+import { env, SESSION_TTL_SECONDS } from '../config.js';
 import { UnauthorizedError } from './errors.js';
 
 export interface AuthContext {

@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+// The httpOnly session cookie the API sets. The dashboard only checks whether it exists; the API verifies it.
+export const SESSION_COOKIE = 'deskmate_session';
+
 // Normalize before validating, so " Ana@Mail.com " and "ana@mail.com" are the same account.
 export const Email = z.string().trim().toLowerCase().pipe(z.email('Enter a valid email'));
 
