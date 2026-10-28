@@ -2,7 +2,7 @@
 
 An AI customer support platform. A business uploads its help docs, embeds a chat widget on its site, and an AI agent answers customers with cited answers, handing off to a human when it isn't sure.
 
-**Status: Phase 2 in progress — accounts, login, background ingestion and shared types done (API only so far).**
+**Status: Phase 2 in progress — API (accounts, background ingestion) and the first dashboard pages (login, signup) are done.**
 
 ## How a question is answered
 
@@ -41,6 +41,7 @@ apps/api/
   src/routes/documents.ts upload / list / delete
   src/routes/chat.ts      ask a question
   scripts/create-indexes.ts  collections + vector index setup
+apps/web/                 Next.js dashboard (login, signup, dashboard home); see apps/web/README.md
 packages/shared/
   src/auth.ts             signup/login Zod schemas, AuthResponse
   src/chat.ts             ChatBody schema, ChatResponse, Source
@@ -62,11 +63,19 @@ You need Node 22+, a free MongoDB Atlas account, a free Upstash Redis database a
    cd apps/api
    cp .env.example .env      # paste MONGODB_URI, REDIS_URL, GOOGLE_GENERATIVE_AI_API_KEY, and a JWT_SECRET (openssl rand -base64 48)
    npm run db:setup          # creates collections and the vector index (takes ~1 min)
-   npm run dev               # terminal 1: API on http://localhost:4000
-   npm run dev:worker        # terminal 2: ingestion worker
+   cd ../web && cp .env.example .env.local && cd ../..
+
+   # three terminals, from the repo root:
+   npm run dev:api           # API on http://localhost:4000
+   npm run dev:worker        # ingestion worker
+   npm run dev:web           # dashboard on http://localhost:3000
    ```
 
 ## Try it
+
+In the browser: open http://localhost:3000, sign up, and you land on your dashboard.
+
+With curl (talks to the API directly):
 
 Every API call needs a login. With curl, `-c cookies.txt` saves the session cookie and `-b cookies.txt` sends it, like a browser would.
 

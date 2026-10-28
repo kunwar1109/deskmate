@@ -39,7 +39,8 @@ How to work with Rishabh:
 **Phase 1 (core RAG) runs end to end against live Atlas + Gemini.** All five README test questions pass (three cited answers, two correct handoffs). Fixed along the way: free-tier 429s now fail fast with 503/504 instead of hanging; chat model switched to Flash-Lite for speed and quota; chat logs include `topScore` and `handoffReason` even on handoff. 
 **Phase 2 step 1 (accounts + login) is done** and verified with curl: signup/login/logout/me, `/api/documents` and `/api/chat` behind `requireAuth`, tenant isolation checked with two accounts. 
 **Phase 2 step 2 (background ingestion) is done** and verified: upload returns 202 in ~0.25s, the worker marks the sample `ready` in ~12s and a question asked immediately after is answered (fixes the Atlas indexing delay seen in step 1). Unreadable files fail once with no retries (`UnrecoverableError`); delete during processing leaves no chunks or file; retry-until-final detection checked with a throwaway queue. BullMQ 6 needs `ioredis` installed explicitly (optional peer). Upstash free tier = 500K commands/month, so don't lower the worker's polling settings. 
-**Phase 2 step 3 (`packages/shared`) is done**: API validates with the shared schemas and returns the shared types (`DocumentSummary`, `AuthResponse`, `ChatResponse`); renaming a shared field breaks the API typecheck as intended. Next: step 4, `apps/web` (Next.js) login/signup.
+**Phase 2 step 3 (`packages/shared`) is done**: API validates with the shared schemas and returns the shared types (`DocumentSummary`, `AuthResponse`, `ChatResponse`); renaming a shared field breaks the API typecheck as intended. 
+**Phase 2 step 4 (`apps/web` login/signup) is done**: verified through the dev server (rewrite signup/login/logout, cookie HttpOnly on localhost, proxy redirect, forged cookie -> /login, dashboard streams user + workspace) and `next build` (/dashboard is Partial Prerender, login/signup static). Not yet click-tested in a real browser by Claude (no browser automation until Playwright in phase 4). Next: step 5, documents page.
 
 Observed so far: Gemini similarity scores bunch together (on-topic ~0.82, off-topic ~0.81 on the sample doc), so `MIN_RELEVANCE` alone can't separate them; guardrail 2 (`NO_ANSWER`) does most of the work. Tune with more docs and logs.
 
@@ -63,11 +64,19 @@ apps/api/
   src/worker.ts             separate process; concurrency 1; drainDelay 60s + stalledInterval 5m to save Upstash commands
   src/routes/chat.ts        POST / { question } -> { answer, sources, handoff, usage, latencyMs }
   scripts/create-indexes.ts creates collections, indexes, vector index; waits until queryable
+apps/web/                        Next.js 16 dashboard: (auth)/login, (auth)/signup, dashboard/ (layout + page + error)
+  next.config.ts            /api/* rewrite to API_URL (same-origin cookie, no CORS); / redirects to /dashboard
+  src/proxy.ts              optimistic check: no session cookie on /dashboard/* -> /login (never the reverse: loop risk)
+  src/lib/session.ts        getCurrentUser(): forwards cookie to GET /api/auth/me; redirect('/login') on 401; not cached
+  src/lib/api.ts            browser fetch helpers (apiFetch, postJson, ApiRequestError)
+  src/components/auth/      login/signup forms (react-hook-form + zodResolver with shared schemas), logout button
 packages/shared/                 @deskmate/shared: Zod schemas + API response types (auth, chat, documents, errors)
 samples/brewbox-help-center.md   fake coffee-subscription help center for testing
 ```
 
 `@deskmate/shared` ships TypeScript source with no build step (`exports` map each subpath to `src/*.ts`; tsx and Next.js compile it). Import by subpath, e.g. `@deskmate/shared/auth`; there is no index, so shared files don't need `.js` relative imports. Request schemas and response types live there; DB record types stay in `apps/api/src/db.ts`. API responses use `id` (string), never `_id` or `workspaceId`. Root `npm run typecheck` checks every workspace.
+
+**Next.js 16 differs from older versions** (Middleware is now `proxy.ts`, Cache Components on). Before writing web code, read `apps/web/AGENTS.md` and the matching guide in `node_modules/next/dist/docs/`. With Cache Components, anything reading `cookies()` (e.g. `getCurrentUser`) must sit inside `<Suspense>`, never at the top of a layout. Run `npm run build -w apps/web` to catch that; dev only warns. shadcn/ui uses the Radix base, Nova preset, and the `cn` package (shadcn's clsx + tailwind-merge replacement). Pin new frontend deps to releases at least ~2 weeks old.
 
 Commands (from `apps/api`): `npm run db:setup`, `npm run dev` (API), `npm run dev:worker` (worker, separate terminal), `npm run typecheck`. Test calls are in the root `README.md`.
 
