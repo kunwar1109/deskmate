@@ -2,7 +2,7 @@
 
 An AI customer support platform. A business uploads its help docs, embeds a chat widget on its site, and an AI agent answers customers with cited answers, handing off to a human when it isn't sure.
 
-**Status: Phase 2 complete (accounts and workspaces, background ingestion, dashboard). Phase 3 in progress: a tool-using support agent with saved, multi-turn, streamed conversations.**
+**Status: Phase 2 complete (accounts and workspaces, background ingestion, dashboard). Phase 3 in progress: a tool-using support agent with saved, multi-turn, streamed conversations, and an embeddable chat widget.**
 
 ## How a question is answered
 
@@ -48,7 +48,12 @@ apps/api/
   src/lib/public-messages.ts  strips tool calls, scores and usage from what customers receive
   src/lib/rate-limit.ts   fixed-window limits in Redis (atomic Lua script)
   scripts/create-indexes.ts  collections + vector index setup
-apps/web/                 Next.js dashboard (login, signup, dashboard home); see apps/web/README.md
+apps/web/                 Next.js dashboard (documents, test chat, widget settings); see apps/web/README.md
+apps/widget/              embeddable chat widget: React code bundled with Preact into one script, rendered in Shadow DOM
+  src/main.tsx            reads the snippet's data attributes, mounts into a shadow root
+  src/widget.tsx          launcher, panel, chat (useChat), cited sources
+  src/api.ts              public API calls, visitor session in localStorage
+  index.html              demo "customer site" with hostile CSS, for npm run dev:widget
 packages/shared/
   src/auth.ts             signup/login Zod schemas, AuthResponse
   src/chat.ts             SendMessageBody, tool input/output types, DeskmateUIMessage, Conversation
@@ -77,6 +82,7 @@ You need Node 22+, a free MongoDB Atlas account, a free Upstash Redis database a
    npm run dev:api           # API on http://localhost:4000
    npm run dev:worker        # ingestion worker
    npm run dev:web           # dashboard on http://localhost:3000
+   npm run build:widget      # builds apps/widget/dist/widget.js, which the API serves at /widget.js
    ```
 
 ## Try it
@@ -125,9 +131,20 @@ curl -b cookies.txt -X DELETE localhost:4000/api/documents/<id>
 curl localhost:4000/api/documents
 ```
 
-### The public widget API
+### The chat widget
 
-This is what the embeddable widget (next step) calls from a customer's website. It needs no login: the **widget key** in the URL picks the company, and each chat gets a **visitor token** that proves this browser started it.
+In the dashboard, open **Widget**: it shows the one-line snippet to paste into a website, the list of sites allowed to use it, and a button to replace the key. The snippet loads `widget.js` from the API, so run `npm run build:widget` first (and again after changing the widget).
+
+To try it on a fake customer site with deliberately hostile CSS (Comic Sans, lime buttons), which the widget's Shadow DOM keeps out:
+
+```bash
+cd apps/widget && cp .env.example .env.local   # paste your key from the Widget page
+npm run dev:widget                             # http://localhost:5173
+```
+
+If you've set allowed websites, add `http://localhost:5173` to the list.
+
+The widget calls the public API below. It needs no login: the **widget key** in the URL picks the company, and each chat gets a **visitor token** that proves this browser started it.
 
 ```bash
 # As the owner (logged in): get your widget key, optionally restrict which sites may embed it
