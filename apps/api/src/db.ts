@@ -38,6 +38,11 @@ export interface UserRecord {
 export interface WorkspaceRecord {
   _id?: ObjectId;
   name: string;
+  // Created the first time the owner opens the widget settings.
+  widget?: {
+    key: string; // public (it's in the embed snippet), so stored as is; unique index
+    allowedOrigins: string[]; // sites allowed to embed the widget; empty = any
+  };
   createdAt: Date;
 }
 
@@ -66,8 +71,10 @@ export interface TicketRecord {
 export interface ConversationRecord {
   _id?: ObjectId;
   workspaceId: string;
-  channel: 'playground';
+  channel: 'playground' | 'widget';
   status: ConversationStatus;
+  // Widget chats only: SHA-256 of the visitor's token. The token itself is only ever in the visitor's browser.
+  visitorTokenHash?: string;
   title: string;
   handoffReason?: HandoffReason;
   createdAt: Date;

@@ -6,14 +6,20 @@ import { ZodError } from 'zod';
 import { env } from './config.js';
 import { closeDb, connectDb } from './db.js';
 import { requireAuth } from './lib/auth.js';
-import { HttpError } from './lib/errors.js';
+import { HttpError, RateLimitError } from './lib/errors.js';
 import { UnsupportedFileError } from './lib/extract.js';
+import { closeRateLimiter } from './lib/rate-limit.js';
 import { authRouter } from './routes/auth.js';
 import { conversationsRouter } from './routes/conversations.js';
 import { documentsRouter } from './routes/documents.js';
+import { publicRouter } from './routes/public.js';
+import { widgetRouter } from './routes/widget.js';
 import { ingestQueue } from './queue.js';
 
 const app = express();
+// Behind a load balancer, req.socket's address is the proxy's. Trusting exactly N hops makes req.ip the real
+// client from X-Forwarded-For; trusting more would let clients fake their IP and dodge rate limits.
+app.set('trust proxy', env.TRUST_PROXY_HOPS);
 app.use(express.json({ limit: '100kb' }));
 app.use(cookieParser());
 
@@ -21,13 +27,17 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true });
 });
 app.use('/api/auth', authRouter);
+// Public widget API: called from customers' websites, no login. Its own CORS, key and rate-limit checks.
+app.use('/api/public/w/:widgetKey', publicRouter);
 // Everything below needs a logged-in user. Applying requireAuth here means a new route can't forget it.
 app.use('/api/documents', requireAuth, documentsRouter);
 app.use('/api/conversations', requireAuth, conversationsRouter);
+app.use('/api/widget', requireAuth, widgetRouter);
 
 // Express 5 forwards errors from async handlers here automatically.
 const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   if (err instanceof HttpError) {
+    if (err instanceof RateLimitError) res.setHeader('Retry-After', String(err.retryAfterSeconds));
     res.status(err.status).json({ error: err.message });
     return;
   }
@@ -61,6 +71,6 @@ const server = app.listen(env.PORT, () => {
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
-    server.close(() => void Promise.all([closeDb(), ingestQueue.close()]).then(() => process.exit(0)));
+    server.close(() => void Promise.all([closeDb(), ingestQueue.close(), closeRateLimiter()]).then(() => process.exit(0)));
   });
 }

@@ -14,6 +14,7 @@ import {
   messages,
   tickets,
   users,
+  workspaces,
 } from '../src/db.js';
 
 await connectDb();
@@ -29,6 +30,11 @@ await chunks.createIndex({ documentId: 1 });
 await users.createIndex({ email: 1 }, { unique: true });
 await memberships.createIndex({ userId: 1, workspaceId: 1 }, { unique: true });
 await tickets.createIndex({ workspaceId: 1, createdAt: -1 });
+// Every widget request looks its workspace up by key. Partial: workspaces without a widget yet aren't indexed.
+await workspaces.createIndex(
+  { 'widget.key': 1 },
+  { unique: true, partialFilterExpression: { 'widget.key': { $exists: true } } },
+);
 await conversations.createIndex({ workspaceId: 1, updatedAt: -1 });
 // Loading a chat's history: every message of one conversation, oldest first.
 await messages.createIndex({ conversationId: 1, createdAt: 1 });

@@ -85,7 +85,7 @@ export type ConversationStatus = 'open' | 'handed_off';
 
 export interface Conversation {
   id: string;
-  channel: 'playground'; // 'widget' arrives with the embeddable widget
+  channel: 'playground' | 'widget'; // dashboard test chat, or a real customer on the embedded widget
   status: ConversationStatus;
   title: string; // the first customer message, shortened
   handoffReason?: HandoffReason;

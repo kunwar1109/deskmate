@@ -22,3 +22,12 @@ export class ConflictError extends HttpError {
     super(409, message);
   }
 }
+
+export class RateLimitError extends HttpError {
+  readonly retryAfterSeconds: number;
+
+  constructor(retryAfterSeconds: number) {
+    super(429, 'Too many requests. Please wait a moment and try again.');
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
