@@ -18,13 +18,35 @@ declare module 'ioredis' {
   }
 }
 
-// Its own connection, separate from BullMQ's: those wait indefinitely by design, a rate-limit check must fail fast.
-const redis = new Redis(env.REDIS_URL, { maxRetriesPerRequest: 1, commandTimeout: 1000 });
-redis.on('error', (err) => console.warn('Rate limit Redis error:', err.message));
-redis.defineCommand('hitWindow', { numberOfKeys: 1, lua: HIT_WINDOW }); // sent once, then called by its hash
+/** Where request counts live. Redis in production; tests swap in an in-memory store (setRateLimitStore). */
+export interface RateLimitStore {
+  /** Counts one hit in `key`'s window and returns [hits so far, seconds until the window resets]. */
+  hit(key: string, windowSeconds: number): Promise<[number, number]>;
+  close?(): Promise<void>;
+}
+
+function redisStore(): RateLimitStore {
+  // Its own connection, separate from BullMQ's: those wait indefinitely by design, a rate-limit check must fail fast.
+  const redis = new Redis(env.REDIS_URL, { maxRetriesPerRequest: 1, commandTimeout: 1000 });
+  redis.on('error', (err) => console.warn('Rate limit Redis error:', err.message));
+  redis.defineCommand('hitWindow', { numberOfKeys: 1, lua: HIT_WINDOW }); // sent once, then called by its hash
+  return {
+    hit: (key, windowSeconds) => redis.hitWindow(key, windowSeconds),
+    close: async () => {
+      await redis.quit();
+    },
+  };
+}
+
+// Created on first use, so importing this module (in tests, in scripts) doesn't open a Redis connection.
+let store: RateLimitStore | undefined;
+
+export function setRateLimitStore(next: RateLimitStore) {
+  store = next;
+}
 
 export async function closeRateLimiter() {
-  await redis.quit();
+  await store?.close?.();
 }
 
 interface RateLimitRule {
@@ -56,7 +78,8 @@ export async function checkRateLimit({ name, limit, windowSeconds }: Omit<RateLi
   let count: number;
   let ttl: number;
   try {
-    [count, ttl] = await redis.hitWindow(`rl:${name}:${key}`, windowSeconds);
+    store ??= redisStore();
+    [count, ttl] = await store.hit(`rl:${name}:${key}`, windowSeconds);
   } catch (err) {
     console.warn(`Rate limiter unavailable, allowing request (${name}):`, (err as Error).message);
     return;

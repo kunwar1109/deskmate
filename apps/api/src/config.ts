@@ -1,9 +1,12 @@
 import { z } from 'zod';
 
 // Load .env with Node's built-in loader (no dotenv needed). Missing file is fine in production.
-try {
-  process.loadEnvFile();
-} catch {}
+// Never in tests: they set their own values (test/env.ts), and must not pick up the real database or keys.
+if (process.env.NODE_ENV !== 'test') {
+  try {
+    process.loadEnvFile();
+  } catch {}
+}
 
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),

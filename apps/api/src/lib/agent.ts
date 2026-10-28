@@ -48,7 +48,7 @@ Style: concise and friendly. Short paragraphs, or a short list using "- " lines 
  * Step 0 of every turn is a fresh search, so facts always come from fresh passages with fresh numbers;
  * the history only tells the model what the customer means. It also keeps each prompt small.
  */
-function toModelHistory(history: DeskmateUIMessage[]): ModelMessage[] {
+export function toModelHistory(history: DeskmateUIMessage[]): ModelMessage[] {
   const turns: { role: 'user' | 'assistant'; text: string }[] = [];
   for (const message of history.slice(-MAX_HISTORY_MESSAGES)) {
     if (message.role === 'system') continue;
