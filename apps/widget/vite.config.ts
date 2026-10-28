@@ -23,5 +23,14 @@ export default defineConfig(({ mode }) => ({
     // The CSS is imported as a string (styles.css?inline) and injected into the Shadow DOM, so there's no CSS file.
     lib: { entry: 'src/main.tsx', name: 'DeskmateWidget', formats: ['iife'], fileName: () => 'widget.js' },
     target: 'es2020',
+    rolldownOptions: {
+      onwarn(warning, warn) {
+        // swr and @ai-sdk/react start with 'use client', a Next.js marker for "runs in the browser".
+        // In a single browser script everything runs in the browser, so dropping it is correct. Hide only this
+        // warning: other warnings still show.
+        if (warning.code === 'MODULE_LEVEL_DIRECTIVE' && warning.message.includes('use client')) return;
+        warn(warning);
+      },
+    },
   },
 }));
