@@ -1,4 +1,5 @@
 import { APICallError, RetryError } from 'ai';
+import { MAX_UPLOAD_BYTES } from '@deskmate/shared/documents';
 import cookieParser from 'cookie-parser';
 import express, { type ErrorRequestHandler } from 'express';
 import multer from 'multer';
@@ -36,7 +37,11 @@ const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     return;
   }
   if (err instanceof multer.MulterError) {
-    res.status(400).json({ error: err.message });
+    // 413 Payload Too Large is the precise status for an oversized upload; other multer errors are bad input.
+    const tooLarge = err.code === 'LIMIT_FILE_SIZE';
+    res
+      .status(tooLarge ? 413 : 400)
+      .json({ error: tooLarge ? `File is larger than the ${MAX_UPLOAD_BYTES / (1024 * 1024)} MB limit` : err.message });
     return;
   }
   if (err instanceof UnsupportedFileError) {
