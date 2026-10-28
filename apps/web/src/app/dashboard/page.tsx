@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Suspense } from "react";
 import { getCurrentUser } from "@/lib/session";
 
@@ -10,7 +11,13 @@ export default function DashboardPage() {
       <Suspense fallback={<h1 className="h-8 w-64 animate-pulse rounded-md bg-muted" />}>
         <Welcome />
       </Suspense>
-      <p className="text-muted-foreground">Your documents and the test chat will appear here.</p>
+      <p className="text-muted-foreground">
+        Start by uploading your help docs on the{" "}
+        <Link href="/dashboard/documents" className="font-medium text-foreground underline underline-offset-4">
+          Documents
+        </Link>{" "}
+        page. The test chat comes next.
+      </p>
     </div>
   );
 }

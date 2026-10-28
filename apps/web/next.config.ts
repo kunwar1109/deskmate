@@ -15,6 +15,12 @@ const nextConfig: NextConfig = {
       },
     },
   },
+  experimental: {
+    // Next buffers at most 10 MB of a forwarded request body by default, which would cut a file at the upload
+    // limit short. Allow the 10 MB limit (MAX_UPLOAD_BYTES) plus multipart overhead, so the API sees the whole
+    // request and returns its own clear "too large" error.
+    proxyClientMaxBodySize: "11mb",
+  },
   // The browser calls /api/* on this app, and Next forwards it to Express. To the browser the API is
   // same-origin, so the httpOnly session cookie is first-party and no CORS setup is needed. In production
   // (web on Vercel, API on Render) this is what keeps the cookie working across the two hosts.

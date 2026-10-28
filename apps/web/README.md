@@ -11,3 +11,4 @@ npm run dev                  # http://localhost:3000 (needs the API running)
 - `src/proxy.ts` redirects to `/login` when there's no session cookie (optimistic check only).
 - `src/lib/session.ts` `getCurrentUser()` forwards the cookie to `GET /api/auth/me`; the API decides if it's valid. Call it only inside `<Suspense>`.
 - Forms validate with the same Zod schemas as the API (`@deskmate/shared`).
+- Documents use TanStack Query; the list polls every 2 seconds only while a document is processing.
