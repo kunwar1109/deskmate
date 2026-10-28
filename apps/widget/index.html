@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="data:," />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BrewBox (demo store with the Deskmate widget)</title>
+    <style>
+      /*
+       * Deliberately hostile CSS, the kind real sites ship by accident. None of it should touch the widget:
+       * if the chat panel shows Comic Sans, red text or lime buttons, Shadow DOM isolation is broken.
+       */
+      * {
+        font-family: 'Comic Sans MS', cursive !important;
+        color: #c00 !important;
+        letter-spacing: 2px !important;
+      }
+      button {
+        background: lime !important;
+        border: 5px dashed purple !important;
+        padding: 30px !important;
+        border-radius: 0 !important;
+      }
+      div {
+        margin: 12px !important;
+      }
+      p {
+        font-size: 28px !important;
+      }
+      body {
+        max-width: 720px;
+        margin: 40px auto;
+        padding: 0 16px;
+        background: #fffbe6;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>BrewBox</h1>
+    <p>Fresh coffee, delivered monthly. This page plays the part of a customer's website.</p>
+    <button type="button">A host page button</button>
+
+    <!--
+      The embed snippet. In production it's one line from the dashboard's Widget page:
+      <script src="https://your-api/widget.js" data-widget-key="wk_..." async></script>
+      Here Vite serves the source as a module, and the key comes from apps/widget/.env.local.
+    -->
+    <script
+      type="module"
+      src="/src/main.tsx"
+      data-widget-key="%VITE_DEMO_WIDGET_KEY%"
+      data-api-url="%VITE_DEMO_API_URL%"
+    ></script>
+  </body>
+</html>
