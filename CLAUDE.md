@@ -45,7 +45,9 @@ How to work with Rishabh:
 **Phase 2 step 6 (test-chat playground) is done, so Phase 2 is complete.** Verified: `next build` (/dashboard/playground is Partial Prerender), page renders, chat via the rewrite returns the cited answer and the `no_answer` handoff the UI expects, `parseCitations` checked on edge cases. Playground turns are independent (single-shot RAG); multi-turn comes with the phase 3 agent. Answers render as plain text with line breaks (no Markdown renderer yet). 
 **Phase 3 plan**: (1) agent with tools, (2) conversations + multi-turn + streaming, (3) widget key, public API, rate limiting, (4) Vite widget in Shadow DOM, (5) Socket.io live handoff inbox.
 
-**Phase 3 step 1 (agent with tools) is done.** Verified with real Gemini calls: cited price and cancellation answers; espresso machines -> searched twice then `not_in_docs` handoff (consistent across runs); "ship to Dubai?" -> answered no with citations (explicit in docs); order lookup with id+email -> status, without email -> asks for it; "talk to a person" -> `customer_requested`; damaged bag + email -> `createTicket` (saved under the right workspace); prompt injection refused. Typically 2-3 model calls and ~2.5-4.5s per question. Still single-turn (each question independent). `tickets` collection added (run `npm run db:setup`). Next: step 2, conversations + streaming.
+**Phase 3 step 1 (agent with tools) is done.** Verified with real Gemini calls: cited price and cancellation answers; espresso machines -> searched twice then `not_in_docs` handoff (consistent across runs); "ship to Dubai?" -> answered no with citations (explicit in docs); order lookup with id+email -> status, without email -> asks for it; "talk to a person" -> `customer_requested`; damaged bag + email -> `createTicket` (saved under the right workspace); prompt injection refused. Typically 2-3 model calls and ~2.5-4.5s per question. `tickets` collection added.
+
+**Phase 3 step 2 (conversations, multi-turn, streaming) is done.** `conversations` + `messages` collections (one doc per message, UIMessage parts stored as-is; run `npm run db:setup`). Client sends only `{ text }`; the server builds the user UIMessage, loads history, streams the reply as an AI SDK UI message stream (`pipeUIMessageStreamToResponse`), and saves it in `onEnd`. The model sees history as plain text only (last 12 messages, `[n]` stripped, no old tool results); every turn re-searches, so citations restart at [1] per reply. Verified with curl: follow-up "can I pause it?" resolved to the Explorer plan; order id in one message + email in the next -> lookupOrder; espresso -> handoff, conversation `handed_off`; other workspace / bad id -> 404; empty text -> 400; client disconnect after 1s -> full reply still saved (the UI stream is `tee()`d, one branch drained on the server); stream arrives incrementally through the Next rewrite. Timeout/abort and error replies are not saved and don't mark a handoff. Not click-tested in a browser yet. The bot still replies after a handoff (stopping it is step 5). Gemini free tier had a slow spell (17-25s for a 5-token reply, no reasoning tokens), which can hit the 45s cap; it recovered to ~3s.
 
 Observed so far: Gemini similarity scores bunch together (on-topic ~0.82, off-topic ~0.81 on the sample doc), so `MIN_RELEVANCE` alone can't separate them; guardrail 2 (`NO_ANSWER`) does most of the work. Tune with more docs and logs.
 
@@ -57,7 +59,8 @@ apps/api/
   src/lib/chunk.ts          recursive splitter, ~1000 chars, 150 overlap, keeps page numbers
   src/lib/embed.ts          embedDocuments (RETRIEVAL_DOCUMENT), embedQuery (RETRIEVAL_QUERY)
   src/lib/retrieve.ts       $vectorSearch top 5, filtered by workspaceId, returns score
-  src/lib/agent.ts          runSupportAgent: ToolLoopAgent (max 6 steps, stops on handoffToHuman, step 0 forced to searchDocs); tools built per request, closing over workspaceId
+  src/lib/agent.ts          streamSupportAgent: ToolLoopAgent (max 6 steps, stops on handoffToHuman, step 0 forced to searchDocs); tools built per request, closing over workspaceId; text-only history; returns a tee'd UI message stream, onEnd saves
+  src/lib/ai-errors.ts      describeAiError: Gemini 429 / timeout -> readable line sent inside the stream (status is already 200)
   src/lib/mock-orders.ts    MOCK order data for lookupOrder (needs order id AND email)
   src/lib/auth.ts           argon2id hashing, HS256 JWT (jose) in httpOnly cookie, requireAuth, getAuth
   src/lib/errors.ts         HttpError / UnauthorizedError / ConflictError, mapped in index.ts
@@ -68,7 +71,7 @@ apps/api/
   src/lib/files.ts          GridFS bucket "uploads", file _id = document _id
   src/queue.ts              BullMQ "ingest" queue on Upstash (REDIS_URL); jobId = documentId
   src/worker.ts             separate process; concurrency 1; drainDelay 60s + stalledInterval 5m to save Upstash commands
-  src/routes/chat.ts        POST / { question } -> { answer, sources, handoff, usage, latencyMs }
+  src/routes/conversations.ts POST / (create, 201), GET /:id (conversation + messages), POST /:id/messages { text } -> streamed reply
   scripts/create-indexes.ts creates collections, indexes, vector index; waits until queryable
 apps/web/                        Next.js 16 dashboard: (auth)/login, (auth)/signup, dashboard/ (layout + page + error)
   next.config.ts            /api/* rewrite to API_URL (same-origin cookie, no CORS); / redirects to /dashboard
@@ -78,8 +81,8 @@ apps/web/                        Next.js 16 dashboard: (auth)/login, (auth)/sign
   src/components/auth/      login/signup forms (react-hook-form + zodResolver with shared schemas), logout button
   src/lib/documents.ts      TanStack Query hooks: useDocuments (polls every 2s only while any doc is processing), upload, delete; validateFile
   src/components/documents/ upload zone (click + drag-drop, multiple, client-side type/size check), table (status badges, failed reason, delete confirm)
-  src/lib/chat.ts           useAsk mutation; parseCitations() turns [n] into parts (unknown n stays text)
-  src/components/playground/ test chat: turns list, answer with clickable citations, sources with score bars + cited badges, handoff reason + topScore, latency/tokens
+  src/lib/chat.ts           useConversation, createConversation, messageText/messagePassages, chatErrorMessage, parseCitations
+  src/components/playground/ useChat + DefaultChatTransport (sends only { text }; creates the conversation on first send; ?c=<id> in the URL reloads it); assistant-message renders live tool steps, cited text, passages, handoff box, latency/tokens
   src/components/providers.tsx  QueryClient (any 401 -> /login, no retry on 4xx) + sonner Toaster; wraps the dashboard layout
 packages/shared/                 @deskmate/shared: Zod schemas + API response types (auth, chat, documents, errors)
 samples/brewbox-help-center.md   fake coffee-subscription help center for testing
@@ -87,7 +90,7 @@ samples/brewbox-help-center.md   fake coffee-subscription help center for testin
 
 `@deskmate/shared` ships TypeScript source with no build step (`exports` map each subpath to `src/*.ts`; tsx and Next.js compile it). Import by subpath, e.g. `@deskmate/shared/auth`; there is no index, so shared files don't need `.js` relative imports. Request schemas and response types live there; DB record types stay in `apps/api/src/db.ts`. API responses use `id` (string), never `_id` or `workspaceId`. Root `npm run typecheck` checks every workspace.
 
-**Next.js 16 differs from older versions** (Middleware is now `proxy.ts`, Cache Components on). Before writing web code, read `apps/web/AGENTS.md` and the matching guide in `node_modules/next/dist/docs/`. With Cache Components, anything reading `cookies()` (e.g. `getCurrentUser`) must sit inside `<Suspense>`, never at the top of a layout. Run `npm run build -w apps/web` to catch that; dev only warns. shadcn/ui uses the Radix base, Nova preset, and the `cn` package (shadcn's clsx + tailwind-merge replacement). Pin new frontend deps to releases at least ~2 weeks old. `experimental.proxyClientMaxBodySize: '11mb'` in next.config.ts is required: Next only buffers 10 MB of a forwarded body by default, which truncated uploads at the limit into a bare 500.
+**Next.js 16 differs from older versions** (Middleware is now `proxy.ts`, Cache Components on). Before writing web code, read `apps/web/AGENTS.md` and the matching guide in `node_modules/next/dist/docs/`. With Cache Components, anything reading `cookies()` (e.g. `getCurrentUser`) must sit inside `<Suspense>`, never at the top of a layout. Run `npm run build -w apps/web` to catch that; dev only warns. shadcn/ui uses the Radix base, Nova preset, and the `cn` package (shadcn's clsx + tailwind-merge replacement). Pin new frontend deps to releases at least ~2 weeks old. The AI SDK is pinned exactly and identically in api, web and shared (`ai` 7.0.140, `@ai-sdk/react` 4.0.143, `@ai-sdk/google` 4.0.95, all sharing `@ai-sdk/provider-utils` 5.0.59) so there is one copy of `ai` and its types match; upgrade them together. In v7, `agent.stream()` returns a Promise. `experimental.proxyClientMaxBodySize: '11mb'` in next.config.ts is required: Next only buffers 10 MB of a forwarded body by default, which truncated uploads at the limit into a bare 500.
 
 Commands (from `apps/api`): `npm run db:setup`, `npm run dev` (API), `npm run dev:worker` (worker, separate terminal), `npm run typecheck`. Test calls are in the root `README.md`.
 
@@ -134,4 +137,4 @@ Citation numbers are assigned per request across all searches (same chunk = same
 
 ## Interview talking points to keep accurate
 
-Chunking size and overlap, asymmetric embeddings (document vs query task types), tenant isolation via filtered vector search, two-layer hallucination guardrail, prompt-injection handling, why ingestion moves to a queue, why a monorepo, `0.0.0.0/0` trade-off vs private endpoints, free-tier data-privacy trade-off.
+Chunking size and overlap, asymmetric embeddings (document vs query task types), tenant isolation via filtered vector search, two-layer hallucination guardrail, prompt-injection handling, why ingestion moves to a queue, why a monorepo, `0.0.0.0/0` trade-off vs private endpoints, free-tier data-privacy trade-off, text-only history vs replaying tool results, client sends only text (server owns history), tee'd stream so replies survive disconnects, why stream errors can't be HTTP status codes.
