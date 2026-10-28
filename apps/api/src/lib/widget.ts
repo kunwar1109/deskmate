@@ -45,3 +45,12 @@ export async function ensureWidget(workspaceId: string): Promise<WidgetSettings>
   if (!workspace?.widget) throw new Error(`Workspace ${workspaceId} has no widget settings`);
   return { key: workspace.widget.key, allowedOrigins: workspace.widget.allowedOrigins, scriptUrl: `${env.PUBLIC_URL}/widget.js` };
 }
+
+/**
+ * Browsers always send Origin on cross-site requests, and pages can't fake it. That stops another website from
+ * embedding a workspace's widget and spending its AI quota through its visitors. (A script outside a browser
+ * can set any Origin; the rate limits handle those.) An empty list allows every site.
+ */
+export function isOriginAllowed(allowedOrigins: string[], origin: string | undefined): boolean {
+  return allowedOrigins.length === 0 || (origin !== undefined && allowedOrigins.includes(origin));
+}

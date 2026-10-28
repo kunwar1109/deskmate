@@ -92,6 +92,7 @@ export function toWidgetMessage(message: DeskmateUIMessage): WidgetUIMessage {
     metadata: {
       ...(message.metadata?.createdAt !== undefined ? { createdAt: message.metadata.createdAt } : {}),
       ...(message.role === 'assistant' ? { handedOff } : {}),
+      ...(message.metadata?.sender ? { sender: message.metadata.sender } : {}), // "Priya from BrewBox"
     },
   };
 }

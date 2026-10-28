@@ -1,4 +1,5 @@
 import type { UIMessage } from 'ai';
+import type { ConversationStatus, HumanSender } from '@deskmate/shared/chat';
 import { z } from 'zod';
 
 /**
@@ -50,6 +51,7 @@ export interface CitedSource {
 export interface WidgetMessageMetadata {
   createdAt?: number;
   handedOff?: boolean; // the reply passed the chat to a human
+  sender?: HumanSender; // a team member wrote this, not the bot
 }
 
 /**
@@ -61,5 +63,6 @@ export type WidgetUIMessage = UIMessage<WidgetMessageMetadata, { sources: CitedS
 
 export interface WidgetConversation {
   conversationId: string;
+  status: ConversationStatus;
   messages: WidgetUIMessage[];
 }

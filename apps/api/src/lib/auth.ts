@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import { SESSION_COOKIE } from '@deskmate/shared/auth';
 import argon2 from 'argon2';
 import type { CookieOptions, Request, RequestHandler, Response } from 'express';
@@ -47,15 +48,41 @@ export function createSessionToken(auth: AuthContext): Promise<string> {
     .sign(secret);
 }
 
-async function readSessionToken(token: string): Promise<AuthContext | null> {
+function readSessionToken(token: string): Promise<AuthContext | null> {
+  return readToken(token, secret);
+}
+
+async function readToken(token: string, key: Uint8Array): Promise<AuthContext | null> {
   try {
     // Pinning the algorithm stops "alg: none" style token forgery.
-    const { payload } = await jwtVerify(token, secret, { algorithms: ['HS256'] });
+    const { payload } = await jwtVerify(token, key, { algorithms: ['HS256'] });
     if (typeof payload.sub !== 'string' || typeof payload.wid !== 'string') return null;
     return { userId: payload.sub, workspaceId: payload.wid };
   } catch {
     return null; // expired, tampered with, or not a JWT at all
   }
+}
+
+/**
+ * Socket tickets: the dashboard's realtime connection goes straight to the API, which in production is a
+ * different site from the dashboard, so the session cookie isn't sent there. Instead the dashboard fetches a
+ * 60-second ticket through the normal cookie-protected API and connects with it.
+ * Signed with a key derived from JWT_SECRET, so a ticket can't be replayed as a session cookie (or vice versa).
+ */
+const realtimeSecret = createHmac('sha256', env.JWT_SECRET).update('deskmate:realtime-ticket').digest();
+export const REALTIME_TICKET_TTL_SECONDS = 60;
+
+export function createRealtimeTicket(auth: AuthContext): Promise<string> {
+  return new SignJWT({ wid: auth.workspaceId })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setSubject(auth.userId)
+    .setIssuedAt()
+    .setExpirationTime(`${REALTIME_TICKET_TTL_SECONDS}s`)
+    .sign(realtimeSecret);
+}
+
+export function readRealtimeTicket(token: unknown): Promise<AuthContext | null> {
+  return typeof token === 'string' ? readToken(token, realtimeSecret) : Promise.resolve(null);
 }
 
 const cookieOptions: CookieOptions = {

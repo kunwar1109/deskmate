@@ -8,7 +8,7 @@ import { createConversation, findConversation, loadMessages, replyToMessage } fr
 import { HttpError } from '../lib/errors.js';
 import { toPublicStream, toWidgetMessage } from '../lib/public-messages.js';
 import { byIp, checkRateLimit, rateLimit } from '../lib/rate-limit.js';
-import { generateVisitorToken, hashToken, tokenMatches } from '../lib/widget.js';
+import { generateVisitorToken, hashToken, isOriginAllowed, tokenMatches } from '../lib/widget.js';
 
 /**
  * The API the embedded widget calls from customers' websites. Mounted at /api/public/w/:widgetKey.
@@ -35,9 +35,6 @@ publicRouter.use(async (req: Request<{ widgetKey: string }>, res, next) => {
   const workspace = await workspaces.findOne({ 'widget.key': req.params.widgetKey }, { projection: { name: 1, widget: 1 } });
   if (!workspace?.widget) throw new HttpError(404, 'Unknown widget key');
 
-  // Browsers always send Origin on cross-site requests, and pages can't fake it. That stops another website from
-  // embedding this widget and spending this workspace's AI quota through its visitors. (A script outside a browser
-  // can set any Origin; the rate limits handle those.)
   const origin = req.get('origin');
   const { allowedOrigins } = workspace.widget;
   if (origin) {
@@ -46,7 +43,7 @@ publicRouter.use(async (req: Request<{ widgetKey: string }>, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin'); // the answer depends on Origin, so caches must not share it across sites
   }
-  if (allowedOrigins.length > 0 && (!origin || !allowedOrigins.includes(origin))) {
+  if (!isOriginAllowed(allowedOrigins, origin)) {
     throw new HttpError(403, 'This website is not allowed to use this widget');
   }
   // No Access-Control-Allow-Credentials: the widget never sends cookies; it authenticates with its visitor token.
@@ -96,6 +93,7 @@ publicRouter.get('/conversations/:id', async (req, res) => {
   const conversation = await findVisitorConversation(req, res);
   const body: WidgetConversation = {
     conversationId: conversation._id.toString(),
+    status: conversation.status,
     messages: (await loadMessages(conversation._id)).map(toWidgetMessage),
   };
   res.json(body);

@@ -9,7 +9,8 @@
     "./chat": "./src/chat.ts",
     "./documents": "./src/documents.ts",
     "./errors": "./src/errors.ts",
-    "./widget": "./src/widget.ts"
+    "./widget": "./src/widget.ts",
+    "./realtime": "./src/realtime.ts"
   },
   "scripts": {
     "typecheck": "tsc"

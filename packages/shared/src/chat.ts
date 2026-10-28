@@ -68,6 +68,12 @@ export type DeskmateTools = {
   };
 };
 
+/** A reply written by a person on the team, not the bot. */
+export interface HumanSender {
+  kind: 'human';
+  name: string;
+}
+
 /** Facts about an assistant reply, sent when it starts and finishes streaming. */
 export interface MessageMetadata {
   createdAt?: number; // epoch ms
@@ -76,12 +82,32 @@ export interface MessageMetadata {
   // Best retrieval score across this reply's searches. Logged so MIN_RELEVANCE can be tuned.
   topScore?: number | null;
   handoffReason?: HandoffReason; // set when this reply handed the chat to a human
+  sender?: HumanSender; // set on replies typed by a team member in the inbox; absent = the bot
 }
 
 /** A chat message as the AI SDK streams it, stores it and renders it: text parts plus typed tool parts. */
 export type DeskmateUIMessage = UIMessage<MessageMetadata, UIDataTypes, DeskmateTools>;
 
-export type ConversationStatus = 'open' | 'handed_off';
+/**
+ * - open: the bot is answering
+ * - handed_off: a person is needed or has taken over; the bot stays quiet in widget chats
+ * - closed: resolved by the team; a new customer message reopens it with the bot
+ */
+export type ConversationStatus = 'open' | 'handed_off' | 'closed';
+
+/** A team member's reply from the inbox. */
+export const HumanReplyBody = z.object({
+  text: z.string().trim().min(1, 'Type a reply').max(4000, 'Reply is too long'),
+});
+export type HumanReplyInput = z.input<typeof HumanReplyBody>;
+
+/** Inbox actions: "hand back to the bot" (open) or "close". handed_off is set by a handoff or a human reply. */
+export const ConversationStatusBody = z.object({ status: z.enum(['open', 'closed']) });
+export type ConversationStatusInput = z.input<typeof ConversationStatusBody>;
+
+export const ConversationListQuery = z.object({
+  status: z.enum(['open', 'handed_off', 'closed']).optional(),
+});
 
 export interface Conversation {
   id: string;

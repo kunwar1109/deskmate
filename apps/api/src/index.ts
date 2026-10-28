@@ -14,8 +14,10 @@ import { authRouter } from './routes/auth.js';
 import { conversationsRouter } from './routes/conversations.js';
 import { documentsRouter } from './routes/documents.js';
 import { publicRouter } from './routes/public.js';
+import { realtimeRouter } from './routes/realtime.js';
 import { widgetRouter } from './routes/widget.js';
 import { ingestQueue } from './queue.js';
+import { initRealtime } from './realtime.js';
 
 const app = express();
 // Behind a load balancer, req.socket's address is the proxy's. Trusting exactly N hops makes req.ip the real
@@ -51,6 +53,7 @@ app.use('/api/public/w/:widgetKey', publicRouter);
 app.use('/api/documents', requireAuth, documentsRouter);
 app.use('/api/conversations', requireAuth, conversationsRouter);
 app.use('/api/widget', requireAuth, widgetRouter);
+app.use('/api/realtime', requireAuth, realtimeRouter);
 
 // Express 5 forwards errors from async handlers here automatically.
 const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
@@ -86,9 +89,12 @@ await connectDb();
 const server = app.listen(env.PORT, () => {
   console.log(`Deskmate API on http://localhost:${env.PORT}`);
 });
+// Socket.io shares the HTTP server and port: it handles /socket.io/ requests before Express sees them.
+const io = initRealtime(server);
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
-    server.close(() => void Promise.all([closeDb(), ingestQueue.close(), closeRateLimiter()]).then(() => process.exit(0)));
+    // io.close() disconnects sockets too; otherwise their open connections keep the server from closing.
+    void io.close(() => void Promise.all([closeDb(), ingestQueue.close(), closeRateLimiter()]).then(() => process.exit(0)));
   });
 }
