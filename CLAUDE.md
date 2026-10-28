@@ -20,7 +20,7 @@ How to work with Rishabh:
 
 - **Monorepo** with npm workspaces (root `package.json` → `"workspaces": ["apps/*"]`; later `packages/*`). One repo, not separate ones.
 - **API (`apps/api`)**: Node 22+, Express 5, TypeScript (ESM, `module: NodeNext`), Zod 4, MongoDB driver 7, multer, unpdf.
-- **AI**: Vercel AI SDK v7 (`ai`, `@ai-sdk/google`). Chat model `gemini-flash-latest` (free tier). Embeddings `gemini-embedding-001` at 768 dimensions.
+- **AI**: Vercel AI SDK v7 (`ai`, `@ai-sdk/google`). Chat model `gemini-flash-lite-latest` (free tier; Flash was too slow and capped at 20 requests/day). Embeddings `gemini-embedding-001` at 768 dimensions.
 - **Database**: MongoDB Atlas (free M0) with Atlas Vector Search.
 - **Planned**: Next.js dashboard (`apps/web`), Vite widget (`apps/widget`), shared types (`packages/shared`), BullMQ + Redis, Socket.io, Jest, Supertest, React Testing Library, Playwright, GitHub Actions, Sentry.
 

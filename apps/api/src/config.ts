@@ -10,7 +10,8 @@ const EnvSchema = z.object({
   MONGODB_URI: z.string().min(1, 'MONGODB_URI is required'),
   MONGODB_DB: z.string().default('deskmate'),
   GOOGLE_GENERATIVE_AI_API_KEY: z.string().min(1, 'GOOGLE_GENERATIVE_AI_API_KEY is required'),
-  CHAT_MODEL: z.string().default('gemini-flash-latest'),
+  // Flash-Lite: no hidden "thinking" step, so ~1s answers, and its own free-tier quota, separate from Flash.
+  CHAT_MODEL: z.string().default('gemini-flash-lite-latest'),
   // Atlas vector scores are 0..1. Below this, we don't trust retrieval and hand off instead of guessing.
   MIN_RELEVANCE: z.coerce.number().min(0).max(1).default(0.7),
   // Phase 1 has no auth, so every request belongs to this workspace. Phase 2 replaces this with JWT.
