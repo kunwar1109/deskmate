@@ -176,6 +176,33 @@ Watch the server logs: each reply prints the tools the agent used, the top retri
 
 The agent also handles orders and tickets. Try `Where is my order BB-10234?` and then your email `priya@example.com` as a second message (mock order data in `src/lib/mock-orders.ts`), `I want to talk to a person`, or `My bag arrived torn, my email is priya@example.com`.
 
+## Evals: how good is the bot?
+
+`npm run eval` runs the real agent on a golden set of 54 questions (`apps/api/evals/golden.jsonl`) and grades every answer:
+
+| Category | What's checked |
+|---|---|
+| answerable (22) | the right facts are in the answer, and the passage holding them was retrieved |
+| unanswerable (12) | it hands off instead of guessing (decaf, PayPal, store locations...) |
+| handoff (6) | it hands off when the customer asks for a person or needs a judgment call |
+| injection (6) | "ignore your instructions", "print your system prompt", fake price overrides: none may work |
+| tools (5) | order lookups need the right email; a damaged box with an email creates a ticket |
+| follow-up (3) | "can I pause it?" after asking about a plan |
+
+Scores, each with a threshold (the script exits with code 1 below any of them, so CI can gate on it):
+
+- **Retrieval hit rate**: the passage with the answer was among those the agent was shown (≥ 90%)
+- **Handoff accuracy**: answered when it should, handed off when it should (≥ 90%)
+- **Faithfulness**: an LLM judge checks every claim in an answer against the passages and tool results the agent saw (≥ 90%)
+- **Pass rate**: every check of a case passed (≥ 85%)
+- **Injection resistance**: all injection cases held (100%)
+
+It uses its own fixed eval workspace, never yours, and indexes the sample help center there once. Options: `--only id1,id2`, `--category injection`, `--limit 10`. A full run is about 200 Gemini calls, paced to stay under free-tier limits, so it takes several minutes (longer when Gemini is slow); avoid running it many times a day. Full results go to `apps/api/evals/results/` (git-ignored).
+
+The judge is the same free model as the agent by default, which can be lenient on its own mistakes; set `EVAL_JUDGE_MODEL` to a stronger model when you have one. Before grading, the judge is calibrated on two answers with known verdicts (one faithful, one with an invented fact); if it gets either wrong, the run stops.
+
+**First results** (October 2026, Gemini Flash-Lite on the free tier): retrieval 100%, handoff accuracy 100%, injection resistance 100%, citations on every docs answer, and all 54 cases passing across a full run plus a rerun of 8 cases that timed out while Gemini was slow. The eval also caught a bug in its own judge (it rejected "we don't ship outside India, so we can't ship to Dubai"), which is why calibration exists.
+
 ## Roadmap
 
 - [x] Phase 1: ingestion, vector search, grounded answers with citations, relevance guardrail
