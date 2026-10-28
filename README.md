@@ -41,13 +41,19 @@ apps/api/
   src/worker.ts           background worker process
   src/routes/auth.ts      signup / login / logout / me
   src/routes/documents.ts upload / list / delete
-  src/routes/conversations.ts  create / load a conversation, send a message (streams the reply)
+  src/routes/conversations.ts  dashboard: create / load a conversation, send a test message (streams the reply)
+  src/routes/public.ts    public widget API: widget key + visitor token, CORS, rate limits, customer-safe stream
+  src/routes/widget.ts    owner: widget key, allowed origins, rotate key
+  src/lib/conversations.ts  save message, run agent, save reply (shared by dashboard and widget)
+  src/lib/public-messages.ts  strips tool calls, scores and usage from what customers receive
+  src/lib/rate-limit.ts   fixed-window limits in Redis (atomic Lua script)
   scripts/create-indexes.ts  collections + vector index setup
 apps/web/                 Next.js dashboard (login, signup, dashboard home); see apps/web/README.md
 packages/shared/
   src/auth.ts             signup/login Zod schemas, AuthResponse
   src/chat.ts             SendMessageBody, tool input/output types, DeskmateUIMessage, Conversation
   src/documents.ts        upload limits, DocumentSummary
+  src/widget.ts           WidgetUIMessage (customer view), widget settings, allowed-origins schema
   src/errors.ts           ApiError
 samples/brewbox-help-center.md  test document
 ```
@@ -118,6 +124,25 @@ curl -b cookies.txt -X DELETE localhost:4000/api/documents/<id>
 # Without the cookie, everything except auth returns 401
 curl localhost:4000/api/documents
 ```
+
+### The public widget API
+
+This is what the embeddable widget (next step) calls from a customer's website. It needs no login: the **widget key** in the URL picks the company, and each chat gets a **visitor token** that proves this browser started it.
+
+```bash
+# As the owner (logged in): get your widget key, optionally restrict which sites may embed it
+curl -b cookies.txt localhost:4000/api/widget
+curl -b cookies.txt -X PUT localhost:4000/api/widget/allowed-origins -H "Content-Type: application/json" -d '{"allowedOrigins":["https://brewbox.example"]}'
+
+# As a visitor (no cookie). With allowed origins set, add -H "Origin: https://brewbox.example".
+curl localhost:4000/api/public/w/<widget-key>
+curl -X POST localhost:4000/api/public/w/<widget-key>/conversations     # -> conversationId + visitorToken (shown once)
+curl -N -X POST localhost:4000/api/public/w/<widget-key>/conversations/<id>/messages \
+  -H "Authorization: Bearer <visitorToken>" -H "Content-Type: application/json" -d '{"text":"How much is the Explorer plan?"}'
+curl localhost:4000/api/public/w/<widget-key>/conversations/<id> -H "Authorization: Bearer <visitorToken>"
+```
+
+Customers get text and source titles only; tool calls, scores and token usage stay in the dashboard. Limits per IP: 60 requests/minute, 10 new chats/hour, 10 messages/minute; per company: 300 messages/hour. Over a limit you get `429` with a `Retry-After` header.
 
 Watch the server logs: each reply prints the tools the agent used, the top retrieval score, latency and tokens. Use those scores to tune `MIN_RELEVANCE`.
 
