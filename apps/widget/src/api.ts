@@ -37,6 +37,8 @@ export function createApi({ apiUrl, widgetKey }: WidgetOptions) {
       }
     },
     messagesUrl: (conversationId: string) => `${base}/conversations/${conversationId}/messages`,
+    apiUrl,
+    widgetKey,
   };
 }
 

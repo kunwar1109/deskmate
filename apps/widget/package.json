@@ -19,6 +19,7 @@
     "@ai-sdk/react": "4.0.143",
     "@deskmate/shared": "^0.1.0",
     "ai": "7.0.140",
-    "preact": "10.29.8"
+    "preact": "10.29.8",
+    "socket.io-client": "4.8.4"
   }
 }

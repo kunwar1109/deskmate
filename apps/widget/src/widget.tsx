@@ -1,7 +1,10 @@
 import { useChat } from '@ai-sdk/react';
+import type { ConversationStatus } from '@deskmate/shared/chat';
+import type { VisitorServerEvents } from '@deskmate/shared/realtime';
 import type { CitedSource, WidgetSession, WidgetUIMessage } from '@deskmate/shared/widget';
 import { DefaultChatTransport } from 'ai';
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { io, type Socket } from 'socket.io-client';
 import {
   chatErrorMessage,
   clearSession,
@@ -15,16 +18,43 @@ import {
 
 const MAX_MESSAGE_LENGTH = 2000; // same limit as the API
 
+type VisitorSocket = Socket<VisitorServerEvents>;
+
 export function Widget(options: WidgetOptions) {
   const [api] = useState(() => createApi(options));
   const [open, setOpen] = useState(false);
   // The panel mounts on first open and then stays mounted (just hidden), so closing it mid-reply keeps the chat.
   const [opened, setOpened] = useState(false);
+  const [session, setSession] = useState(() => loadSession(options.widgetKey));
+  const [socket, setSocket] = useState<VisitorSocket | null>(null);
+  const [unread, setUnread] = useState(false);
   const launcherRef = useRef<HTMLButtonElement>(null);
+  const openRef = useRef(open); // read inside the socket listener without reconnecting when `open` changes
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
+
+  // Live connection, only for visitors who have a chat: it carries team replies and "a person has taken over".
+  // Visitors who never chat never connect.
+  useEffect(() => {
+    if (!session) return;
+    const connection: VisitorSocket = io(`${api.apiUrl}/visitor`, {
+      auth: { widgetKey: api.widgetKey, conversationId: session.conversationId, visitorToken: session.visitorToken },
+    });
+    connection.on('message:new', () => {
+      if (!openRef.current) setUnread(true); // a reply arrived while the panel is closed
+    });
+    setSocket(connection);
+    return () => {
+      connection.close();
+      setSocket(null);
+    };
+  }, [api, session]);
 
   function toggle() {
     setOpen((value) => !value);
     setOpened(true);
+    setUnread(false);
   }
 
   function close() {
@@ -36,7 +66,7 @@ export function Widget(options: WidgetOptions) {
     <>
       {opened && (
         <div id="deskmate-panel" className="panel" hidden={!open}>
-          <Panel api={api} widgetKey={options.widgetKey} open={open} onClose={close} />
+          <Panel api={api} session={session} onSession={setSession} socket={socket} open={open} onClose={close} />
         </div>
       )}
       <button
@@ -44,11 +74,12 @@ export function Widget(options: WidgetOptions) {
         type="button"
         className="launcher"
         onClick={toggle}
-        aria-label={open ? 'Close chat' : 'Open chat'}
+        aria-label={open ? 'Close chat' : unread ? 'Open chat, new reply' : 'Open chat'}
         aria-expanded={open}
         aria-controls="deskmate-panel"
       >
         {open ? <CloseIcon /> : <ChatIcon />}
+        {unread && !open && <span className="unread" aria-hidden="true" />}
       </button>
     </>
   );
@@ -57,32 +88,37 @@ export function Widget(options: WidgetOptions) {
 type PanelState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
-  | { status: 'ready'; workspaceName: string; session: WidgetSession | null; messages: WidgetUIMessage[] };
+  | { status: 'ready'; workspaceName: string; messages: WidgetUIMessage[]; chatStatus: ConversationStatus };
 
 interface PanelProps {
   api: WidgetApi;
-  widgetKey: string;
+  session: WidgetSession | null;
+  onSession: (session: WidgetSession | null) => void;
+  socket: VisitorSocket | null;
   open: boolean;
   onClose: () => void;
 }
 
 /** Loads the workspace name and any saved chat, then shows the chat. Runs on first open, not on page load. */
-function Panel({ api, widgetKey, open, onClose }: PanelProps) {
+function Panel({ api, session, onSession, socket, open, onClose }: PanelProps) {
   const [state, setState] = useState<PanelState>({ status: 'loading' });
   const [chatKey, setChatKey] = useState(0);
+  const [initialSession] = useState(session); // what to load; later changes come from this panel itself
 
   useEffect(() => {
     let cancelled = false;
-    const saved = loadSession(widgetKey);
-    Promise.all([api.getConfig(), saved ? api.loadConversation(saved) : null])
+    Promise.all([api.getConfig(), initialSession ? api.loadConversation(initialSession) : null])
       .then(([config, conversation]) => {
-        if (saved && !conversation) clearSession(widgetKey); // the chat is gone (e.g. the key was rotated)
+        if (initialSession && !conversation) {
+          clearSession(api.widgetKey); // the chat is gone (e.g. the key was rotated)
+          onSession(null);
+        }
         if (cancelled) return;
         setState({
           status: 'ready',
           workspaceName: config.workspaceName,
-          session: conversation ? saved : null,
           messages: conversation?.messages ?? [],
+          chatStatus: conversation?.status ?? 'open',
         });
       })
       .catch((err: Error) => {
@@ -91,11 +127,12 @@ function Panel({ api, widgetKey, open, onClose }: PanelProps) {
     return () => {
       cancelled = true;
     };
-  }, [api, widgetKey]);
+  }, [api, initialSession, onSession]);
 
   function startOver() {
-    clearSession(widgetKey);
-    if (state.status === 'ready') setState({ ...state, session: null, messages: [] });
+    clearSession(api.widgetKey);
+    onSession(null);
+    if (state.status === 'ready') setState({ ...state, messages: [], chatStatus: 'open' });
     setChatKey((key) => key + 1); // a fresh useChat with no messages
   }
 
@@ -133,10 +170,12 @@ function Panel({ api, widgetKey, open, onClose }: PanelProps) {
         <ChatView
           key={chatKey}
           api={api}
-          widgetKey={widgetKey}
           workspaceName={state.workspaceName}
-          session={state.session}
+          session={session}
+          onSession={onSession}
+          socket={socket}
           initialMessages={state.messages}
+          initialStatus={state.chatStatus}
           open={open}
         />
       )}
@@ -146,15 +185,19 @@ function Panel({ api, widgetKey, open, onClose }: PanelProps) {
 
 interface ChatViewProps {
   api: WidgetApi;
-  widgetKey: string;
   workspaceName: string;
   session: WidgetSession | null;
+  onSession: (session: WidgetSession) => void;
+  socket: VisitorSocket | null;
   initialMessages: WidgetUIMessage[];
+  initialStatus: ConversationStatus;
   open: boolean;
 }
 
-function ChatView({ api, widgetKey, workspaceName, session, initialMessages, open }: ChatViewProps) {
+function ChatView(props: ChatViewProps) {
+  const { api, workspaceName, session, onSession, socket, initialMessages, initialStatus, open } = props;
   const [input, setInput] = useState('');
+  const [chatStatus, setChatStatus] = useState(initialStatus);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
 
@@ -166,7 +209,8 @@ function ChatView({ api, widgetKey, workspaceName, session, initialMessages, ope
         // The chat is created on the first message, so visitors who only open the widget create nothing.
         if (!current) {
           current = await api.createConversation();
-          saveSession(widgetKey, current);
+          saveSession(api.widgetKey, current);
+          onSession(current); // connects the live socket for team replies
         }
         const last = messages.at(-1);
         return {
@@ -178,23 +222,41 @@ function ChatView({ api, widgetKey, workspaceName, session, initialMessages, ope
     });
   });
 
-  const { messages, sendMessage, status, error } = useChat<WidgetUIMessage>({
+  const { messages, sendMessage, setMessages, status, error } = useChat<WidgetUIMessage>({
     messages: initialMessages,
     transport,
     throttle: 50,
   });
+
+  // Team replies and status changes arrive over the socket, outside useChat's request/response flow.
+  useEffect(() => {
+    if (!socket) return;
+    const onMessage = (message: WidgetUIMessage) =>
+      setMessages((current) => (current.some((m) => m.id === message.id) ? current : [...current, message]));
+    const onStatus = ({ status: next }: { status: ConversationStatus }) => setChatStatus(next);
+    socket.on('message:new', onMessage);
+    socket.on('conversation:status', onStatus);
+    return () => {
+      socket.off('message:new', onMessage);
+      socket.off('conversation:status', onStatus);
+    };
+  }, [socket, setMessages]);
   const busy = status === 'submitted' || status === 'streaming';
+  const withTeam = chatStatus === 'handed_off';
   const last = messages.at(-1);
-  const waiting = busy && (last?.role === 'user' || (last !== undefined && !messageText(last)));
+  // No typing dots while a person handles the chat: the bot isn't going to answer.
+  const waiting = busy && !withTeam && (last?.role === 'user' || (last !== undefined && !messageText(last)));
 
   useEffect(() => {
     if (open) inputRef.current?.focus();
   }, [open]);
 
+  // Also on open: a reply that arrived while the panel was hidden couldn't be scrolled to (a hidden element has no size).
+  // And when the team banner appears, since it makes the message area shorter.
   useEffect(() => {
     const log = logRef.current;
-    if (log) log.scrollTop = log.scrollHeight;
-  }, [messages, status]);
+    if (log && open) log.scrollTop = log.scrollHeight;
+  }, [messages, status, open, withTeam]);
 
   function submit(event?: FormEvent) {
     event?.preventDefault();
@@ -225,7 +287,7 @@ function ChatView({ api, widgetKey, workspaceName, session, initialMessages, ope
               <p>{messageText(message)}</p>
             </div>
           ) : messageText(message) ? (
-            <AssistantMessage key={message.id} message={message} />
+            <AssistantMessage key={message.id} message={message} workspaceName={workspaceName} />
           ) : null,
         )}
         {waiting && (
@@ -241,6 +303,11 @@ function ChatView({ api, widgetKey, workspaceName, session, initialMessages, ope
           </p>
         )}
       </div>
+      {withTeam && (
+        <p className="banner" role="status">
+          You&apos;re chatting with the {workspaceName} team. They&apos;ll reply here.
+        </p>
+      )}
       <form className="composer" onSubmit={submit}>
         <textarea
           ref={inputRef}
@@ -271,8 +338,9 @@ function resize(textarea: HTMLTextAreaElement | null, reset = false) {
   if (!reset) textarea.style.height = `${textarea.scrollHeight}px`;
 }
 
-function AssistantMessage({ message }: { message: WidgetUIMessage }) {
+function AssistantMessage({ message, workspaceName }: { message: WidgetUIMessage; workspaceName: string }) {
   const text = messageText(message);
+  const sender = message.metadata?.sender;
   const sources = new Map<number, CitedSource>();
   for (const part of message.parts) {
     if (part.type === 'data-sources') for (const source of part.data) sources.set(source.n, source);
@@ -284,6 +352,11 @@ function AssistantMessage({ message }: { message: WidgetUIMessage }) {
 
   return (
     <div className="message assistant">
+      {sender && (
+        <p className="sender">
+          {sender.name} · {workspaceName}
+        </p>
+      )}
       <p>
         {text.split(/(\[\d+\])/).map((segment, i) => {
           const n = Number(/^\[(\d+)\]$/.exec(segment)?.[1]);

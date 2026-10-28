@@ -67,7 +67,19 @@ svg {
   place-items: center;
   cursor: pointer;
   box-shadow: 0 6px 20px rgb(0 0 0 / 0.2);
-  transition: transform 0.15s ease;
+  transition: transform 0.15s ease; /* position: fixed (above) also anchors the unread dot */
+}
+
+/* A team reply arrived while the panel was closed. */
+.unread {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--bg);
+  border-radius: 50%;
+  background: #ef4444;
 }
 
 .launcher:hover {
@@ -256,6 +268,22 @@ svg {
 
 .panel-inner > .status.error {
   margin: 16px;
+}
+
+.message .sender {
+  margin-bottom: 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.banner {
+  margin: 0;
+  padding: 8px 14px;
+  border-top: 1px solid var(--border);
+  background: #eef2ff;
+  color: var(--accent);
+  font-size: 13px;
 }
 
 .composer {
