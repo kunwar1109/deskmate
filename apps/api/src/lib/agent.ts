@@ -8,7 +8,7 @@ import {
   type MessageMetadata,
   type SearchDocsOutput,
 } from '@deskmate/shared/chat';
-import { hasToolCall, isStepCount, tool, ToolLoopAgent, toUIMessageStream, type ModelMessage } from 'ai';
+import { generateId, hasToolCall, isStepCount, tool, ToolLoopAgent, toUIMessageStream, type ModelMessage } from 'ai';
 import { z } from 'zod';
 import { env } from '../config.js';
 import { tickets } from '../db.js';
@@ -209,8 +209,10 @@ export async function streamSupportAgent({ workspaceId, workspaceName, history, 
   const uiStream = toUIMessageStream<typeof tools, DeskmateUIMessage>({
     stream: result.stream,
     tools,
-    // Passing the history switches on persistence mode: the reply gets a server-generated id to store.
     originalMessages: [...history, userMessage],
+    // The reply's id, sent to the browser and stored. Without this the SDK leaves it empty, and every saved
+    // reply would share id "" (duplicate React keys, and the inbox would skip "already seen" replies).
+    generateMessageId: generateId,
     messageMetadata: ({ part }): MessageMetadata | undefined => {
       if (part.type === 'start') return { createdAt: Date.now() };
       if (part.type === 'finish') {

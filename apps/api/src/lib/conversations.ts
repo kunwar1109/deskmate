@@ -35,7 +35,13 @@ export function toConversation(doc: WithId<ConversationRecord>): Conversation {
 }
 
 function toUIMessage(doc: WithId<MessageRecord>): DeskmateUIMessage {
-  return { id: doc.messageId, role: doc.role, parts: doc.parts, ...(doc.metadata ? { metadata: doc.metadata } : {}) };
+  return {
+    // Replies saved before ids were generated have messageId "": fall back to the database id, which is unique.
+    id: doc.messageId || doc._id.toString(),
+    role: doc.role,
+    parts: doc.parts,
+    ...(doc.metadata ? { metadata: doc.metadata } : {}),
+  };
 }
 
 export async function createConversation(
@@ -112,7 +118,7 @@ async function updateConversation(
 function emptyReply(): ReplyStream {
   return createUIMessageStream<DeskmateUIMessage>({
     execute: ({ writer }) => {
-      writer.write({ type: 'start' });
+      writer.write({ type: 'start', messageId: generateId() });
       writer.write({ type: 'finish' });
     },
   });
