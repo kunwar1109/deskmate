@@ -2,7 +2,7 @@
 
 An AI customer support platform. A business uploads its help docs, embeds a chat widget on its site, and an AI agent answers customers with cited answers, handing off to a human when it isn't sure.
 
-**Status: Phase 2 in progress — API (accounts, background ingestion) and the first dashboard pages (login, signup) are done.**
+**Status: Phase 2 in progress — API (accounts, background ingestion) and dashboard (login, signup, documents) are done.**
 
 ## How a question is answered
 
@@ -73,7 +73,7 @@ You need Node 22+, a free MongoDB Atlas account, a free Upstash Redis database a
 
 ## Try it
 
-In the browser: open http://localhost:3000, sign up, and you land on your dashboard.
+In the browser: open http://localhost:3000, sign up, then go to **Documents** and drop in `samples/brewbox-help-center.md`. It shows *Processing* and switches to *Ready* by itself after a few seconds.
 
 With curl (talks to the API directly):
 
