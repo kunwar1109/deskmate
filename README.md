@@ -2,7 +2,7 @@
 
 An AI customer support platform. A business uploads its help docs, embeds a chat widget on its site, and an AI agent answers customers with cited answers, handing off to a human when it isn't sure.
 
-**Status: Phase 2 complete (accounts and workspaces, background ingestion, dashboard). Phase 3 in progress: a tool-using support agent with saved, multi-turn, streamed conversations, and an embeddable chat widget.**
+**Status: Phase 3 complete: a tool-using support agent with saved, streamed conversations, an embeddable chat widget, and a live inbox where a person takes over when the bot hands off. Next: Phase 4 (evals, tests, CI).**
 
 ## How a question is answered
 
@@ -44,6 +44,8 @@ apps/api/
   src/routes/conversations.ts  dashboard: create / load a conversation, send a test message (streams the reply)
   src/routes/public.ts    public widget API: widget key + visitor token, CORS, rate limits, customer-safe stream
   src/routes/widget.ts    owner: widget key, allowed origins, rotate key
+  src/routes/realtime.ts  60-second socket ticket for the dashboard
+  src/realtime.ts         Socket.io: /agents (dashboard, per workspace) and /visitor (one widget chat)
   src/lib/conversations.ts  save message, run agent, save reply (shared by dashboard and widget)
   src/lib/public-messages.ts  strips tool calls, scores and usage from what customers receive
   src/lib/rate-limit.ts   fixed-window limits in Redis (atomic Lua script)
@@ -59,6 +61,7 @@ packages/shared/
   src/chat.ts             SendMessageBody, tool input/output types, DeskmateUIMessage, Conversation
   src/documents.ts        upload limits, DocumentSummary
   src/widget.ts           WidgetUIMessage (customer view), widget settings, allowed-origins schema
+  src/realtime.ts         typed Socket.io events for agents and visitors
   src/errors.ts           ApiError
 samples/brewbox-help-center.md  test document
 ```
@@ -131,6 +134,14 @@ curl -b cookies.txt -X DELETE localhost:4000/api/documents/<id>
 curl localhost:4000/api/documents
 ```
 
+### The live inbox
+
+When the bot hands off a widget chat, it appears in the dashboard's **Inbox** at once (with a toast and a count on the nav), without a reload. Open it, read what the bot tried, and reply: the customer sees your answer instantly, with your name. While a person handles a chat the bot stays quiet; **Hand back to bot** lets it answer again, and **Close** resolves the chat (a new customer message reopens it). Replying to any chat takes it over from the bot.
+
+Try it with two windows: the demo store (`npm run dev:widget`) and the dashboard Inbox. In the widget, ask "Can I talk to a person?".
+
+Writes all go through the HTTP API; Socket.io only pushes updates. The dashboard connects with a 60-second ticket (the API is a different site in production, so the session cookie isn't sent there); the widget connects with its visitor token.
+
 ### The chat widget
 
 In the dashboard, open **Widget**: it shows the one-line snippet to paste into a website, the list of sites allowed to use it, and a button to replace the key. The snippet loads `widget.js` from the API, so run `npm run build:widget` first (and again after changing the widget).
@@ -169,6 +180,6 @@ The agent also handles orders and tickets. Try `Where is my order BB-10234?` and
 
 - [x] Phase 1: ingestion, vector search, grounded answers with citations, relevance guardrail
 - [x] Phase 2: JWT auth, workspaces, background ingestion queue, Next.js dashboard
-- [ ] Phase 3: embeddable widget, agent tools, streaming, live human handoff (Socket.io)
+- [x] Phase 3: agent with tools, streamed multi-turn chats, embeddable widget, live human handoff (Socket.io)
 - [ ] Phase 4: eval suite in CI, Jest / Supertest / Playwright, Sentry
 - [ ] Phase 5: MCP server, deployment, demo video
