@@ -17,7 +17,8 @@ chatRouter.post('/', async (req, res) => {
     JSON.stringify({
       event: 'chat',
       handoff: result.handoff,
-      topScore: result.sources[0]?.score ?? null,
+      handoffReason: result.handoffReason,
+      topScore: result.topScore,
       latencyMs: result.latencyMs,
       usage: result.usage,
     }),
