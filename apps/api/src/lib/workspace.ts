@@ -1,11 +1,11 @@
 import type { Request } from 'express';
-import { env } from '../config.js';
+import { getAuth } from './auth.js';
 
 /**
  * Every query in Deskmate is scoped to a workspace (one per customer company).
- * Phase 1: there is no login yet, so everything goes to the dev workspace.
- * Phase 2: this reads the workspace from the verified JWT instead. Routes won't need to change.
+ * The id comes from the verified session cookie, never from the request body or URL,
+ * so nobody can read another workspace's data by sending a different id.
  */
-export function getWorkspaceId(_req: Request): string {
-  return env.DEV_WORKSPACE_ID;
+export function getWorkspaceId(req: Request): string {
+  return getAuth(req).workspaceId;
 }

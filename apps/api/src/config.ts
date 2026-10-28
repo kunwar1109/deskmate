@@ -6,6 +6,7 @@ try {
 } catch {}
 
 const EnvSchema = z.object({
+  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.coerce.number().default(4000),
   MONGODB_URI: z.string().min(1, 'MONGODB_URI is required'),
   MONGODB_DB: z.string().default('deskmate'),
@@ -14,8 +15,8 @@ const EnvSchema = z.object({
   CHAT_MODEL: z.string().default('gemini-flash-lite-latest'),
   // Atlas vector scores are 0..1. Below this, we don't trust retrieval and hand off instead of guessing.
   MIN_RELEVANCE: z.coerce.number().min(0).max(1).default(0.7),
-  // Phase 1 has no auth, so every request belongs to this workspace. Phase 2 replaces this with JWT.
-  DEV_WORKSPACE_ID: z.string().default('dev-workspace'),
+  // Signs session JWTs. Anyone with this can log in as any user, so it must be long and random.
+  JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
 });
 
 const parsed = EnvSchema.safeParse(process.env);
@@ -29,3 +30,5 @@ export const env = parsed.data;
 export const EMBEDDING_MODEL = 'gemini-embedding-001';
 export const EMBEDDING_DIMENSIONS = 768; // reduced from 3072 to save storage; quality loss is small
 export const VECTOR_INDEX_NAME = 'chunks_vector_index';
+export const SESSION_COOKIE = 'deskmate_session';
+export const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days

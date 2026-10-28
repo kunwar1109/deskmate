@@ -1,6 +1,7 @@
 {
   "name": "@deskmate/api",
-  "version": "0.1.0", "private": true,
+  "version": "0.1.0",
+  "private": true,
   "description": "Deskmate API: ingestion, retrieval and chat",
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -12,13 +13,17 @@
   "dependencies": {
     "@ai-sdk/google": "^4.0.106",
     "ai": "^7.0.154",
+    "argon2": "^0.45.1",
+    "cookie-parser": "^1.4.7",
     "express": "^5.3.0",
+    "jose": "^6.2.13",
     "mongodb": "^7.7.0",
     "multer": "^2.5.0",
     "unpdf": "^1.9.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.6",
     "@types/multer": "^2.3.0",
     "@types/node": "^26.6.5",
