@@ -1,4 +1,3 @@
-import { APICallError, RetryError } from 'ai';
 import { MAX_UPLOAD_BYTES } from '@deskmate/shared/documents';
 import cookieParser from 'cookie-parser';
 import express, { type ErrorRequestHandler } from 'express';
@@ -10,7 +9,7 @@ import { requireAuth } from './lib/auth.js';
 import { HttpError } from './lib/errors.js';
 import { UnsupportedFileError } from './lib/extract.js';
 import { authRouter } from './routes/auth.js';
-import { chatRouter } from './routes/chat.js';
+import { conversationsRouter } from './routes/conversations.js';
 import { documentsRouter } from './routes/documents.js';
 import { ingestQueue } from './queue.js';
 
@@ -24,7 +23,7 @@ app.get('/health', (_req, res) => {
 app.use('/api/auth', authRouter);
 // Everything below needs a logged-in user. Applying requireAuth here means a new route can't forget it.
 app.use('/api/documents', requireAuth, documentsRouter);
-app.use('/api/chat', requireAuth, chatRouter);
+app.use('/api/conversations', requireAuth, conversationsRouter);
 
 // Express 5 forwards errors from async handlers here automatically.
 const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
@@ -48,17 +47,8 @@ const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     res.status(415).json({ error: err.message });
     return;
   }
-  // Gemini rate limit. 503, not 429: the client didn't misbehave, our upstream provider is out of quota.
-  const providerError = RetryError.isInstance(err) ? err.lastError : err;
-  if (APICallError.isInstance(providerError) && providerError.statusCode === 429) {
-    console.warn('Gemini rate limit hit:', providerError.message.split('\n')[0]);
-    res.status(503).json({ error: 'The AI service is busy right now. Please try again in a minute.' });
-    return;
-  }
-  if (err instanceof DOMException && err.name === 'TimeoutError') {
-    res.status(504).json({ error: 'The AI service took too long to respond. Please try again.' });
-    return;
-  }
+  // AI failures (Gemini 429s, timeouts) happen mid-stream, after "200 OK" is sent, so they're handled
+  // in lib/ai-errors.ts and reach the client inside the stream, not here.
   console.error(err);
   res.status(500).json({ error: 'Something went wrong' });
 };

@@ -1,10 +1,18 @@
 "use client";
 
-import type { ChatResponse, HandoffReason, Source, ToolCallTrace } from "@deskmate/shared/chat";
-import { FileSearchIcon, PackageIcon, TicketIcon, UserRoundIcon, type LucideIcon } from "lucide-react";
+import { HANDOFF_MESSAGE, type DeskmateUIMessage, type HandoffReason, type Passage } from "@deskmate/shared/chat";
+import {
+  FileSearchIcon,
+  Loader2Icon,
+  PackageIcon,
+  TicketIcon,
+  TriangleAlertIcon,
+  UserRoundIcon,
+  type LucideIcon,
+} from "lucide-react";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { parseCitations } from "@/lib/chat";
+import { messagePassages, messageText, parseCitations } from "@/lib/chat";
 import { cn } from "@/lib/utils";
 
 // Owner-facing explanations: the customer only ever sees the polite handoff message.
@@ -16,117 +24,198 @@ const HANDOFF_EXPLANATION: Record<HandoffReason, string> = {
   agent_failed: "The agent ended without an answer, for example by hitting its step limit.",
 };
 
-const TOOL_ICON: Record<ToolCallTrace["tool"], LucideIcon> = {
-  searchDocs: FileSearchIcon,
-  lookupOrder: PackageIcon,
-  createTicket: TicketIcon,
-  handoffToHuman: UserRoundIcon,
-};
+type ToolPart = Extract<DeskmateUIMessage["parts"][number], { type: `tool-${string}` }>;
 
-export function AnswerCard({ turnId, response }: { turnId: string; response: ChatResponse }) {
+interface ToolStep {
+  icon: LucideIcon;
+  label: string; // what the agent is doing, e.g. Searching docs for "pause plan"
+  result?: string; // what came back, once the tool has finished
+  failed?: boolean;
+}
+
+/** One line per tool call. Inputs arrive while streaming, so every field may still be missing. */
+function describeToolPart(part: ToolPart): ToolStep {
+  const done = part.state === "output-available";
+  const failed = part.state === "output-error";
+  const step = (icon: LucideIcon, label: string, result?: string): ToolStep =>
+    failed ? { icon, label, result: part.errorText, failed } : { icon, label, ...(done ? { result } : {}) };
+
+  switch (part.type) {
+    case "tool-searchDocs": {
+      const output = done ? part.output : undefined;
+      const best = output?.bestScore == null ? "" : ` (best ${output.bestScore.toFixed(3)})`;
+      return step(
+        FileSearchIcon,
+        `Searched docs for “${part.input?.query ?? "…"}”`,
+        output && (output.found ? `${output.passages.length} passage(s)${best}` : `no relevant passages${best}`),
+      );
+    }
+    case "tool-lookupOrder":
+      return step(
+        PackageIcon,
+        `Looked up order ${part.input?.orderId ?? "…"}`,
+        done ? (part.output.found ? `found, ${part.output.order.status}` : "not found") : undefined,
+      );
+    case "tool-createTicket":
+      return step(TicketIcon, "Created a ticket", done ? part.output.ticketNumber : undefined);
+    case "tool-handoffToHuman":
+      return step(UserRoundIcon, "Handed off to a human", done ? part.input.reason : undefined);
+  }
+}
+
+export function AssistantMessage({ message, streaming }: { message: DeskmateUIMessage; streaming: boolean }) {
   const [active, setActive] = useState<number | null>(null);
-  const sourceNumbers = new Set(response.sources.map((s) => s.n));
-  const sourceId = (n: number) => `${turnId}-source-${n}`;
+  const text = messageText(message);
+  const passages = messagePassages(message);
+  const toolParts = message.parts.filter((part): part is ToolPart => part.type.startsWith("tool-"));
+  const handoffPart = message.parts.find((part) => part.type === "tool-handoffToHuman");
+  const handoffReason = message.metadata?.handoffReason;
+  const metadata = message.metadata;
+
+  const sourceNumbers = new Set(passages.map((p) => p.n));
+  const cited = new Set([...text.matchAll(/\[(\d+)\]/g)].map((m) => Number(m[1])));
+  const sourceId = (n: number) => `${message.id}-source-${n}`;
 
   function focusSource(n: number) {
     setActive(n);
     document.getElementById(sourceId(n))?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
 
+  // While tools run and before the first word arrives, say what the agent is doing right now.
+  const current = toolParts.at(-1);
+  const activity = current && current.state !== "output-available" ? describeToolPart(current).label : "Thinking";
+
   return (
     <div className="space-y-4">
-      <p className="leading-relaxed whitespace-pre-line">
-        {parseCitations(response.answer, sourceNumbers).map((part, i) =>
-          part.type === "text" ? (
-            <span key={i}>{part.text}</span>
-          ) : (
-            <button
-              key={i}
-              type="button"
-              onClick={() => focusSource(part.n)}
-              className="mx-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded bg-primary/10 px-1 align-text-top text-xs font-medium text-primary hover:bg-primary/20"
-              aria-label={`Show source ${part.n}`}
-            >
-              {part.n}
-            </button>
-          ),
-        )}
-      </p>
+      {text && (
+        <p className="leading-relaxed whitespace-pre-line">
+          {parseCitations(text, sourceNumbers).map((part, i) =>
+            part.type === "text" ? (
+              <span key={i}>{part.text}</span>
+            ) : (
+              <button
+                key={i}
+                type="button"
+                onClick={() => focusSource(part.n)}
+                className="mx-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded bg-primary/10 px-1 align-text-top text-xs font-medium text-primary hover:bg-primary/20"
+                aria-label={`Show source ${part.n}`}
+              >
+                {part.n}
+              </button>
+            ),
+          )}
+        </p>
+      )}
 
-      {response.handoff && (
+      {handoffReason && <p className="leading-relaxed">{handoffPart?.state === "output-available" ? handoffPart.output.message : HANDOFF_MESSAGE}</p>}
+
+      {streaming && !text && !handoffReason && (
+        <p className="flex items-center gap-2 text-muted-foreground" aria-live="polite">
+          <Loader2Icon className="size-4 animate-spin" aria-hidden /> {activity}…
+        </p>
+      )}
+
+      {!streaming && !text && !handoffReason && (
+        <p className="flex items-center gap-2 text-sm text-destructive">
+          <TriangleAlertIcon className="size-4" aria-hidden /> This reply didn&apos;t finish. Send your message again.
+        </p>
+      )}
+
+      {handoffReason && (
         <div className="flex gap-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
           <UserRoundIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
           <div>
             <p className="font-medium">Handed off to a human</p>
-            {response.handoffReason && <p>{HANDOFF_EXPLANATION[response.handoffReason]}</p>}
-            {response.handoffSummary && <p className="mt-1 italic">Note for your team: {response.handoffSummary}</p>}
-            <p className="mt-1 text-amber-800">
-              Best match score: {response.topScore === null ? "no passages found" : response.topScore.toFixed(3)}
-            </p>
+            <p>{HANDOFF_EXPLANATION[handoffReason]}</p>
+            {handoffPart?.input?.summary && <p className="mt-1 italic">Note for your team: {handoffPart.input.summary}</p>}
+            {metadata?.topScore !== undefined && (
+              <p className="mt-1 text-amber-800">
+                Best match score: {metadata.topScore === null ? "no passages found" : metadata.topScore.toFixed(3)}
+              </p>
+            )}
           </div>
         </div>
       )}
 
-      {response.toolCalls.length > 0 && (
+      {toolParts.length > 0 && (
         <div className="space-y-1">
           <p className="text-sm font-medium text-muted-foreground">How it answered</p>
           <ol className="space-y-1 text-sm">
-            {response.toolCalls.map((call, i) => (
-              <ToolCallRow key={i} call={call} />
+            {toolParts.map((part) => (
+              <ToolStepRow key={part.toolCallId} step={describeToolPart(part)} />
             ))}
           </ol>
         </div>
       )}
 
-      {response.sources.length > 0 && (
+      {passages.length > 0 && (
         <div className="space-y-2">
           <p className="text-sm font-medium text-muted-foreground">Passages the agent was shown</p>
-          {response.sources.map((source) => (
-            <SourceCard key={source.n} id={sourceId(source.n)} source={source} highlighted={active === source.n} />
+          {passages.map((passage) => (
+            <SourceCard
+              key={passage.n}
+              id={sourceId(passage.n)}
+              passage={passage}
+              cited={cited.has(passage.n)}
+              done={!streaming}
+              highlighted={active === passage.n}
+            />
           ))}
         </div>
       )}
 
-      <p className="text-xs text-muted-foreground">
-        {(response.latencyMs / 1000).toFixed(1)}s
-        {response.usage?.inputTokens !== undefined &&
-          ` · ${response.usage.inputTokens} in / ${response.usage.outputTokens ?? 0} out tokens`}
-      </p>
+      {metadata?.latencyMs !== undefined && (
+        <p className="text-xs text-muted-foreground">
+          {(metadata.latencyMs / 1000).toFixed(1)}s
+          {metadata.usage?.inputTokens !== undefined &&
+            ` · ${metadata.usage.inputTokens} in / ${metadata.usage.outputTokens ?? 0} out tokens`}
+        </p>
+      )}
     </div>
   );
 }
 
-function ToolCallRow({ call }: { call: ToolCallTrace }) {
-  const Icon = TOOL_ICON[call.tool];
-  const detail = Object.values(call.input).filter((v) => typeof v === "string").join(" · ");
+function ToolStepRow({ step }: { step: ToolStep }) {
+  const Icon = step.icon;
   return (
     <li className="flex items-start gap-2">
       <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
       <span>
-        <code className="text-xs font-medium">{call.tool}</code>
-        {detail && <span className="text-muted-foreground"> “{detail}”</span>}
-        <span className="text-muted-foreground"> → {call.summary}</span>
+        {step.label}
+        {step.result === undefined ? (
+          <Loader2Icon className="ml-2 inline size-3 animate-spin text-muted-foreground" aria-label="running" />
+        ) : (
+          <span className={step.failed ? "text-destructive" : "text-muted-foreground"}> → {step.result}</span>
+        )}
       </span>
     </li>
   );
 }
 
-function SourceCard({ id, source, highlighted }: { id: string; source: Source; highlighted: boolean }) {
+interface SourceCardProps {
+  id: string;
+  passage: Passage;
+  cited: boolean;
+  done: boolean; // "Not cited" is only true once the answer has finished
+  highlighted: boolean;
+}
+
+function SourceCard({ id, passage, cited, done, highlighted }: SourceCardProps) {
   return (
     <div
       id={id}
       className={cn("rounded-md border p-3 text-sm transition-colors", highlighted && "border-primary bg-primary/5")}
     >
       <div className="mb-1 flex flex-wrap items-center gap-2">
-        <span className="font-medium">[{source.n}]</span>
+        <span className="font-medium">[{passage.n}]</span>
         <span className="truncate">
-          {source.title}
-          {source.page !== undefined && <span className="text-muted-foreground"> · page {source.page}</span>}
+          {passage.title}
+          {passage.page !== undefined && <span className="text-muted-foreground"> · page {passage.page}</span>}
         </span>
-        {source.cited ? <Badge variant="secondary">Cited</Badge> : <Badge variant="outline">Not cited</Badge>}
-        <ScoreBar score={source.score} />
+        {cited ? <Badge variant="secondary">Cited</Badge> : done && <Badge variant="outline">Not cited</Badge>}
+        <ScoreBar score={passage.score} />
       </div>
-      <p className="line-clamp-3 text-muted-foreground">{source.snippet}</p>
+      <p className="line-clamp-3 text-muted-foreground">{passage.text}</p>
     </div>
   );
 }

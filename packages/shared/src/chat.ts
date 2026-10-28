@@ -1,20 +1,18 @@
+import type { UIDataTypes, UIMessage } from 'ai';
 import { z } from 'zod';
 
-export const ChatBody = z.object({
-  question: z.string().trim().min(1, 'Ask a question').max(2000, 'Question is too long'),
+/**
+ * The client sends only the new message's text. The server loads the history itself, so a client
+ * can't rewrite earlier messages or forge tool results.
+ */
+export const SendMessageBody = z.object({
+  text: z.string().trim().min(1, 'Type a message').max(2000, 'Message is too long'),
 });
-export type ChatInput = z.input<typeof ChatBody>;
+export type SendMessageInput = z.input<typeof SendMessageBody>;
 
-/** One passage the agent was shown. `n` matches the [n] citation markers in the answer text. */
-export interface Source {
-  n: number;
-  documentId: string;
-  title: string;
-  page?: number;
-  score: number; // 0..1 vector similarity
-  snippet: string;
-  cited: boolean; // the answer actually referenced [n]
-}
+/** What the customer sees whenever the bot hands off. Fixed text, never model-written. */
+export const HANDOFF_MESSAGE =
+  "I'd like a member of our team to help with this, so I'm passing your chat to them. Someone will reply here shortly.";
 
 /**
  * Why the bot handed the chat to a human:
@@ -25,22 +23,77 @@ export interface Source {
  */
 export type HandoffReason = 'not_in_docs' | 'customer_requested' | 'needs_human' | 'agent_failed';
 
-/** One tool the agent used while answering, for the playground's "how it answered" trace. */
-export interface ToolCallTrace {
-  tool: 'searchDocs' | 'lookupOrder' | 'createTicket' | 'handoffToHuman';
-  input: Record<string, unknown>;
-  summary: string; // e.g. "3 passages (best 0.820)" or "order not found"
+/** One passage the agent was shown. `n` matches the [n] citation markers in the answer text. */
+export interface Passage {
+  n: number;
+  documentId: string;
+  title: string;
+  page?: number;
+  score: number; // 0..1 vector similarity
+  text: string;
 }
 
-export interface ChatResponse {
-  answer: string;
-  sources: Source[];
-  handoff: boolean; // true = the bot couldn't answer confidently; phase 3 routes this to a human
-  handoffReason?: HandoffReason;
-  handoffSummary?: string; // the agent's one-line note for the human who takes over
-  // Best retrieval score across all searches, before the MIN_RELEVANCE filter. Logged so the threshold can be tuned.
-  topScore: number | null;
-  toolCalls: ToolCallTrace[];
+export interface SearchDocsOutput {
+  found: boolean;
+  bestScore: number | null; // best match before the MIN_RELEVANCE filter, so the owner sees near misses
+  passages: Passage[];
+}
+
+export interface OrderDetails {
+  orderId: string;
+  status: 'processing' | 'shipped' | 'delivered';
+  plan: string;
+  placedOn: string;
+  estimatedDelivery?: string;
+  trackingUrl?: string;
+}
+
+export type LookupOrderOutput = { found: true; order: OrderDetails } | { found: false; message: string };
+
+/**
+ * Input and output of each agent tool, as they appear in streamed and stored messages.
+ * The API annotates its tools' execute functions with these output types, so the two can't drift apart.
+ * A type alias, not an interface: only aliases are assignable to the SDK's Record-based UITools.
+ */
+export type DeskmateTools = {
+  searchDocs: { input: { query: string }; output: SearchDocsOutput };
+  lookupOrder: { input: { orderId: string; email: string }; output: LookupOrderOutput };
+  createTicket: {
+    input: { subject: string; summary: string; customerEmail: string };
+    output: { ticketNumber: string };
+  };
+  handoffToHuman: {
+    input: { reason: Exclude<HandoffReason, 'agent_failed'>; summary: string };
+    output: { message: string }; // the fixed message the customer sees
+  };
+};
+
+/** Facts about an assistant reply, sent when it starts and finishes streaming. */
+export interface MessageMetadata {
+  createdAt?: number; // epoch ms
+  latencyMs?: number;
   usage?: { inputTokens?: number; outputTokens?: number };
-  latencyMs: number;
+  // Best retrieval score across this reply's searches. Logged so MIN_RELEVANCE can be tuned.
+  topScore?: number | null;
+  handoffReason?: HandoffReason; // set when this reply handed the chat to a human
+}
+
+/** A chat message as the AI SDK streams it, stores it and renders it: text parts plus typed tool parts. */
+export type DeskmateUIMessage = UIMessage<MessageMetadata, UIDataTypes, DeskmateTools>;
+
+export type ConversationStatus = 'open' | 'handed_off';
+
+export interface Conversation {
+  id: string;
+  channel: 'playground'; // 'widget' arrives with the embeddable widget
+  status: ConversationStatus;
+  title: string; // the first customer message, shortened
+  handoffReason?: HandoffReason;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConversationWithMessages {
+  conversation: Conversation;
+  messages: DeskmateUIMessage[];
 }

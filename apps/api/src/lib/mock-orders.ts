@@ -1,15 +1,11 @@
+import type { OrderDetails } from '@deskmate/shared/chat';
+
 /**
  * MOCK order system for the demo. A real deployment would call the store's own API (Shopify, etc.)
  * with credentials kept on the server. These orders match the BrewBox sample help center.
  */
-interface MockOrder {
-  orderId: string;
+interface MockOrder extends OrderDetails {
   email: string;
-  status: 'processing' | 'shipped' | 'delivered';
-  plan: string;
-  placedOn: string;
-  estimatedDelivery?: string;
-  trackingUrl?: string;
 }
 
 const ORDERS: MockOrder[] = [
@@ -22,7 +18,7 @@ const ORDERS: MockOrder[] = [
  * Requires both the order number and the email on the order, so someone who only knows (or guesses)
  * an order number can't read another customer's order. "Not found" is the same answer for both mismatches.
  */
-export function findOrder(orderId: string, email: string): Omit<MockOrder, 'email'> | null {
+export function findOrder(orderId: string, email: string): OrderDetails | null {
   const order = ORDERS.find(
     (o) => o.orderId === orderId.trim().toUpperCase() && o.email === email.trim().toLowerCase(),
   );

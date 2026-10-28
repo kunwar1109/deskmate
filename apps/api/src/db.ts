@@ -1,3 +1,4 @@
+import type { ConversationStatus, DeskmateUIMessage, HandoffReason } from '@deskmate/shared/chat';
 import type { DocumentStatus, SourceType } from '@deskmate/shared/documents';
 import { MongoClient, type ObjectId } from 'mongodb';
 import { env } from './config.js';
@@ -62,6 +63,30 @@ export interface TicketRecord {
   createdAt: Date;
 }
 
+export interface ConversationRecord {
+  _id?: ObjectId;
+  workspaceId: string;
+  channel: 'playground';
+  status: ConversationStatus;
+  title: string;
+  handoffReason?: HandoffReason;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// One document per message (not an array on the conversation): a long chat can't hit Mongo's 16 MB
+// document limit, and adding a message is an insert instead of rewriting the whole conversation.
+export interface MessageRecord {
+  _id?: ObjectId;
+  workspaceId: string;
+  conversationId: ObjectId;
+  messageId: string; // the AI SDK's UIMessage id
+  role: 'user' | 'assistant';
+  parts: DeskmateUIMessage['parts']; // stored in the AI SDK's UI format, so it renders back as it streamed
+  metadata?: DeskmateUIMessage['metadata'];
+  createdAt: Date;
+}
+
 export const client = new MongoClient(env.MONGODB_URI);
 
 export const db = client.db(env.MONGODB_DB);
@@ -71,6 +96,8 @@ export const users = db.collection<UserRecord>('users');
 export const workspaces = db.collection<WorkspaceRecord>('workspaces');
 export const memberships = db.collection<MembershipRecord>('memberships');
 export const tickets = db.collection<TicketRecord>('tickets');
+export const conversations = db.collection<ConversationRecord>('conversations');
+export const messages = db.collection<MessageRecord>('messages');
 
 export async function connectDb() {
   await client.connect();

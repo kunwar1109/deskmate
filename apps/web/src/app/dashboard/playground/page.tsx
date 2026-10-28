@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Playground } from "@/components/playground/playground";
 
 export const metadata: Metadata = { title: "Test chat · Deskmate" };
@@ -9,11 +10,14 @@ export default function PlaygroundPage() {
       <div>
         <h1 className="text-2xl font-semibold">Test chat</h1>
         <p className="text-muted-foreground">
-          Ask what your customers would ask. See which passages the bot used, how closely they matched, and why it
-          handed off when it did.
+          Chat the way your customers would. Watch each step the agent takes, which passages it used and how closely
+          they matched, and why it handed off when it did.
         </p>
       </div>
-      <Playground />
+      {/* Playground reads ?c= from the URL, which is only known at request time, so it renders inside Suspense. */}
+      <Suspense fallback={<p className="py-10 text-muted-foreground">Loading…</p>}>
+        <Playground />
+      </Suspense>
     </div>
   );
 }
