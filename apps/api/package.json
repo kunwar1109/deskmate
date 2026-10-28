@@ -9,7 +9,8 @@
     "start": "tsx src/index.ts",
     "start:worker": "tsx src/worker.ts",
     "db:setup": "tsx scripts/create-indexes.ts",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "eval": "tsx scripts/eval.ts"
   },
   "license": "MIT",
   "dependencies": {

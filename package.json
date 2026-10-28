@@ -11,6 +11,7 @@
     "dev:web": "npm run dev -w apps/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "dev:widget": "npm run dev -w apps/widget",
-    "build:widget": "npm run build -w apps/widget"
+    "build:widget": "npm run build -w apps/widget",
+    "eval": "npm run eval -w apps/api"
   }
 }

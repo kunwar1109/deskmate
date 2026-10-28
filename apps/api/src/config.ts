@@ -15,6 +15,8 @@ const EnvSchema = z.object({
   GOOGLE_GENERATIVE_AI_API_KEY: z.string().min(1, 'GOOGLE_GENERATIVE_AI_API_KEY is required'),
   // Flash-Lite: no hidden "thinking" step, so ~1s answers, and its own free-tier quota, separate from Flash.
   CHAT_MODEL: z.string().default('gemini-flash-lite-latest'),
+  // Grades answers in the eval suite (scripts/eval.ts). Defaults to CHAT_MODEL; a stronger model judges better.
+  EVAL_JUDGE_MODEL: z.string().optional(),
   // Atlas vector scores are 0..1. Below this, we don't trust retrieval and hand off instead of guessing.
   MIN_RELEVANCE: z.coerce.number().min(0).max(1).default(0.7),
   // Signs session JWTs. Anyone with this can log in as any user, so it must be long and random.
