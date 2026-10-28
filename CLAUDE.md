@@ -42,7 +42,10 @@ How to work with Rishabh:
 **Phase 2 step 3 (`packages/shared`) is done**: API validates with the shared schemas and returns the shared types (`DocumentSummary`, `AuthResponse`, `ChatResponse`); renaming a shared field breaks the API typecheck as intended. 
 **Phase 2 step 4 (`apps/web` login/signup) is done**: verified through the dev server (rewrite signup/login/logout, cookie HttpOnly on localhost, proxy redirect, forged cookie -> /login, dashboard streams user + workspace) and `next build` (/dashboard is Partial Prerender, login/signup static). Not yet click-tested in a real browser by Claude (no browser automation until Playwright in phase 4). 
 **Phase 2 step 5 (documents page) is done**: verified through the rewrite (upload 202, polling to ready, 9.2 MB upload OK, 10.1 MB -> 413 with a clear message, 415 for unsupported, delete, 401 without cookie) and `next build`. Known gap: deleting a document while the worker is *already* embedding it doesn't stop the embedding (chunks are cleaned up afterwards, but Gemini quota is spent); a queued job is removed correctly. 
-**Phase 2 step 6 (test-chat playground) is done, so Phase 2 is complete.** Verified: `next build` (/dashboard/playground is Partial Prerender), page renders, chat via the rewrite returns the cited answer and the `no_answer` handoff the UI expects, `parseCitations` checked on edge cases. Playground turns are independent (single-shot RAG); multi-turn comes with the phase 3 agent. Answers render as plain text with line breaks (no Markdown renderer yet). Next: Phase 3, ask Rishabh before starting.
+**Phase 2 step 6 (test-chat playground) is done, so Phase 2 is complete.** Verified: `next build` (/dashboard/playground is Partial Prerender), page renders, chat via the rewrite returns the cited answer and the `no_answer` handoff the UI expects, `parseCitations` checked on edge cases. Playground turns are independent (single-shot RAG); multi-turn comes with the phase 3 agent. Answers render as plain text with line breaks (no Markdown renderer yet). 
+**Phase 3 plan**: (1) agent with tools, (2) conversations + multi-turn + streaming, (3) widget key, public API, rate limiting, (4) Vite widget in Shadow DOM, (5) Socket.io live handoff inbox.
+
+**Phase 3 step 1 (agent with tools) is done.** Verified with real Gemini calls: cited price and cancellation answers; espresso machines -> searched twice then `not_in_docs` handoff (consistent across runs); "ship to Dubai?" -> answered no with citations (explicit in docs); order lookup with id+email -> status, without email -> asks for it; "talk to a person" -> `customer_requested`; damaged bag + email -> `createTicket` (saved under the right workspace); prompt injection refused. Typically 2-3 model calls and ~2.5-4.5s per question. Still single-turn (each question independent). `tickets` collection added (run `npm run db:setup`). Next: step 2, conversations + streaming.
 
 Observed so far: Gemini similarity scores bunch together (on-topic ~0.82, off-topic ~0.81 on the sample doc), so `MIN_RELEVANCE` alone can't separate them; guardrail 2 (`NO_ANSWER`) does most of the work. Tune with more docs and logs.
 
@@ -54,7 +57,8 @@ apps/api/
   src/lib/chunk.ts          recursive splitter, ~1000 chars, 150 overlap, keeps page numbers
   src/lib/embed.ts          embedDocuments (RETRIEVAL_DOCUMENT), embedQuery (RETRIEVAL_QUERY)
   src/lib/retrieve.ts       $vectorSearch top 5, filtered by workspaceId, returns score
-  src/lib/answer.ts         relevance guardrail, grounded generation with [n] citations, NO_ANSWER -> handoff
+  src/lib/agent.ts          runSupportAgent: ToolLoopAgent (max 6 steps, stops on handoffToHuman, step 0 forced to searchDocs); tools built per request, closing over workspaceId
+  src/lib/mock-orders.ts    MOCK order data for lookupOrder (needs order id AND email)
   src/lib/auth.ts           argon2id hashing, HS256 JWT (jose) in httpOnly cookie, requireAuth, getAuth
   src/lib/errors.ts         HttpError / UnauthorizedError / ConflictError, mapped in index.ts
   src/lib/workspace.ts      getWorkspaceId(req) from the verified session
@@ -87,9 +91,12 @@ samples/brewbox-help-center.md   fake coffee-subscription help center for testin
 
 Commands (from `apps/api`): `npm run db:setup`, `npm run dev` (API), `npm run dev:worker` (worker, separate terminal), `npm run typecheck`. Test calls are in the root `README.md`.
 
-Two guardrails against hallucination:
-1. If no retrieved chunk scores ≥ `MIN_RELEVANCE` (default 0.7, needs tuning from real logs), return a handoff without calling the LLM.
-2. The system prompt makes the model reply `NO_ANSWER` when the passages don't contain the answer; that also becomes a handoff. The prompt also treats passages as data, not instructions (prompt-injection defense).
+Guardrails against hallucination (agent version, Phase 3):
+0. Step 0 is forced to `searchDocs`, so the model never answers from general knowledge without looking.
+1. `searchDocs` drops passages below `MIN_RELEVANCE` (0.7) before the model sees them.
+2. The instructions make the model call `handoffToHuman` (`not_in_docs`) when the passages don't answer; the loop stops and the customer gets a fixed handoff message. Absence is not a "no": "don't mention X" -> hand off; only an explicit statement in the docs (e.g. "we do not ship outside India") may be answered as no.
+3. Passages and tool results are data, not instructions (prompt-injection defense). Answers are plain text, no Markdown.
+Citation numbers are assigned per request across all searches (same chunk = same [n]).
 
 ## Environment notes
 

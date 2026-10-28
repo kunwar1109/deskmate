@@ -29,7 +29,8 @@ apps/api/
   src/lib/chunk.ts        recursive text splitter with overlap
   src/lib/embed.ts        Gemini embeddings (document vs query task types)
   src/lib/retrieve.ts     Atlas $vectorSearch, filtered by workspace
-  src/lib/answer.ts       relevance guardrail + grounded, cited generation
+  src/lib/agent.ts        support agent (AI SDK ToolLoopAgent): searchDocs, lookupOrder (mock), createTicket, handoffToHuman
+  src/lib/mock-orders.ts  demo order data for lookupOrder
   src/lib/auth.ts         argon2id passwords, JWT session cookie, requireAuth middleware
   src/lib/errors.ts       HttpError classes mapped to status codes
   src/lib/workspace.ts    tenant lookup from the verified session
@@ -113,7 +114,9 @@ curl -b cookies.txt -X DELETE localhost:4000/api/documents/<id>
 curl localhost:4000/api/documents
 ```
 
-Watch the server logs: each chat prints the top retrieval score, latency and tokens. Use those scores to tune `MIN_RELEVANCE`.
+Watch the server logs: each chat prints the tools the agent used, the top retrieval score, latency and tokens. Use those scores to tune `MIN_RELEVANCE`.
+
+The agent also handles orders and tickets. Try `Where is my order BB-10234? My email is priya@example.com` (mock order data in `src/lib/mock-orders.ts`), `I want to talk to a person`, or `My bag arrived torn, my email is priya@example.com`.
 
 ## Roadmap
 
