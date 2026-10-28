@@ -1,5 +1,6 @@
 import { MAX_UPLOAD_BYTES } from '@deskmate/shared/documents';
 import cookieParser from 'cookie-parser';
+import { fileURLToPath } from 'node:url';
 import express, { type ErrorRequestHandler } from 'express';
 import multer from 'multer';
 import { ZodError } from 'zod';
@@ -25,6 +26,23 @@ app.use(cookieParser());
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true });
+});
+
+// The embeddable widget, built by apps/widget. Served by the API so the snippet is one URL, and the widget
+// can default to calling the API it came from.
+const WIDGET_SCRIPT = fileURLToPath(new URL('../../widget/dist/widget.js', import.meta.url));
+app.get('/widget.js', (_req, res) => {
+  res.sendFile(
+    WIDGET_SCRIPT,
+    {
+      maxAge: '5m', // short: the filename never changes, so a long cache would delay fixes for every site
+      // Sites that isolate themselves (Cross-Origin-Embedder-Policy) only load cross-site files that opt in.
+      headers: { 'Cross-Origin-Resource-Policy': 'cross-origin' },
+    },
+    (err) => {
+      if (err && !res.headersSent) res.status(404).json({ error: 'Widget not built. Run: npm run build -w apps/widget' });
+    },
+  );
 });
 app.use('/api/auth', authRouter);
 // Public widget API: called from customers' websites, no login. Its own CORS, key and rate-limit checks.

@@ -22,6 +22,8 @@ const EnvSchema = z.object({
   // How many proxies (load balancer, CDN) sit in front of the API. Express needs this to read the real
   // client IP from X-Forwarded-For. 0 locally; on Render or Railway it's usually 1. Too high lets clients fake their IP.
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(0),
+  // Where browsers reach this API. Goes into the widget snippet (<script src="PUBLIC_URL/widget.js">).
+  PUBLIC_URL: z.url().default('http://localhost:4000').transform((url) => url.replace(/\/$/, '')),
 });
 
 const parsed = EnvSchema.safeParse(process.env);

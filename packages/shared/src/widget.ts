@@ -26,6 +26,7 @@ export type AllowedOriginsInput = z.input<typeof AllowedOriginsBody>;
 export interface WidgetSettings {
   key: string; // public: it goes in the embed snippet on the customer's site
   allowedOrigins: string[]; // empty = any site may embed the widget
+  scriptUrl: string; // where the widget script is served from
 }
 
 /** GET /api/public/w/:key: what the widget needs before the first message. */

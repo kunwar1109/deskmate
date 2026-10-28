@@ -40,12 +40,14 @@ publicRouter.use(async (req: Request<{ widgetKey: string }>, res, next) => {
   // can set any Origin; the rate limits handle those.)
   const origin = req.get('origin');
   const { allowedOrigins } = workspace.widget;
-  if (allowedOrigins.length > 0 && (!origin || !allowedOrigins.includes(origin))) {
-    throw new HttpError(403, 'This website is not allowed to use this widget');
-  }
   if (origin) {
+    // Set even when the origin is refused below: then the widget can read and show *why* (the owner forgot to add
+    // "www.", say) instead of a bare network error. The refusal itself carries no data.
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin'); // the answer depends on Origin, so caches must not share it across sites
+  }
+  if (allowedOrigins.length > 0 && (!origin || !allowedOrigins.includes(origin))) {
+    throw new HttpError(403, 'This website is not allowed to use this widget');
   }
   // No Access-Control-Allow-Credentials: the widget never sends cookies; it authenticates with its visitor token.
   if (req.method === 'OPTIONS') {

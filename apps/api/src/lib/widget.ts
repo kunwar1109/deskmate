@@ -1,6 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { WidgetSettings } from '@deskmate/shared/widget';
 import { ObjectId } from 'mongodb';
+import { env } from '../config.js';
 import { workspaces } from '../db.js';
 
 /**
@@ -42,5 +43,5 @@ export async function ensureWidget(workspaceId: string): Promise<WidgetSettings>
   );
   const workspace = await workspaces.findOne({ _id }, { projection: { widget: 1 } });
   if (!workspace?.widget) throw new Error(`Workspace ${workspaceId} has no widget settings`);
-  return { key: workspace.widget.key, allowedOrigins: workspace.widget.allowedOrigins };
+  return { key: workspace.widget.key, allowedOrigins: workspace.widget.allowedOrigins, scriptUrl: `${env.PUBLIC_URL}/widget.js` };
 }
