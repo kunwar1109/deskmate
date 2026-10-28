@@ -1,3 +1,4 @@
+import { APICallError, RetryError } from 'ai';
 import express, { type ErrorRequestHandler } from 'express';
 import multer from 'multer';
 import { ZodError } from 'zod';
@@ -28,6 +29,17 @@ const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   }
   if (err instanceof UnsupportedFileError) {
     res.status(415).json({ error: err.message });
+    return;
+  }
+  // Gemini rate limit. 503, not 429: the client didn't misbehave, our upstream provider is out of quota.
+  const providerError = RetryError.isInstance(err) ? err.lastError : err;
+  if (APICallError.isInstance(providerError) && providerError.statusCode === 429) {
+    console.warn('Gemini rate limit hit:', providerError.message.split('\n')[0]);
+    res.status(503).json({ error: 'The AI service is busy right now. Please try again in a minute.' });
+    return;
+  }
+  if (err instanceof DOMException && err.name === 'TimeoutError') {
+    res.status(504).json({ error: 'The AI service took too long to respond. Please try again.' });
     return;
   }
   console.error(err);

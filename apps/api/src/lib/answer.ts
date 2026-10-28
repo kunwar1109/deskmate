@@ -48,6 +48,10 @@ export async function answerQuestion(workspaceId: string, question: string): Pro
     system: SYSTEM_PROMPT,
     prompt: buildPrompt(question, relevant),
     temperature: 0.2, // support answers should be consistent, not creative
+    // On a free-tier 429 the SDK waits for Gemini's retry-after (up to 60s) before each retry,
+    // so the default of 2 retries could leave a customer waiting minutes. One retry plus a hard timeout caps it.
+    maxRetries: 1,
+    abortSignal: AbortSignal.timeout(30_000),
   });
 
   // Guardrail 2: the model itself says the context doesn't answer the question.
