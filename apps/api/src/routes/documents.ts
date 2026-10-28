@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { ObjectId } from 'mongodb';
-import { chunkPages } from '../lib/chunk.js';
-import { embedDocuments } from '../lib/embed.js';
-import { extractFromFile } from '../lib/extract.js';
+import { HttpError } from '../lib/errors.js';
+import { detectSourceType } from '../lib/extract.js';
+import { deleteFile, saveFile } from '../lib/files.js';
 import { getWorkspaceId } from '../lib/workspace.js';
-import { chunks, documents, type ChunkRecord } from '../db.js';
+import { chunks, documents } from '../db.js';
+import { ingestQueue } from '../queue.js';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -14,10 +15,14 @@ const upload = multer({
 
 export const documentsRouter = Router();
 
+function parseId(id: string): ObjectId {
+  if (!ObjectId.isValid(id)) throw new HttpError(400, 'Invalid document id');
+  return new ObjectId(id);
+}
+
 /**
- * Ingestion pipeline: extract text -> chunk -> embed -> store.
- * Phase 1 runs it inside the request. Phase 2 moves it to a background queue (BullMQ),
- * because a 200-page PDF can take longer than an HTTP request should stay open.
+ * Upload: store the file and queue it. The slow work (extract, chunk, embed) happens in the worker,
+ * so this responds in well under a second even for a 200-page PDF.
  */
 documentsRouter.post('/', upload.single('file'), async (req, res) => {
   if (!req.file) {
@@ -29,13 +34,13 @@ documentsRouter.post('/', upload.single('file'), async (req, res) => {
   const now = new Date();
   const title = (typeof req.body?.title === 'string' && req.body.title.trim()) || req.file.originalname;
 
-  // Validate the file type before creating any records.
-  const extracted = await extractFromFile(req.file);
+  // Reject unsupported types now, while the user is still waiting for a response.
+  const sourceType = detectSourceType(req.file);
 
   const { insertedId: documentId } = await documents.insertOne({
     workspaceId,
     title,
-    sourceType: extracted.sourceType,
+    sourceType,
     status: 'processing',
     chunkCount: 0,
     createdAt: now,
@@ -43,36 +48,17 @@ documentsRouter.post('/', upload.single('file'), async (req, res) => {
   });
 
   try {
-    const pieces = chunkPages(extracted.pages, { paged: extracted.paged });
-    if (pieces.length === 0) throw new Error('No readable text found. Scanned PDFs need OCR, which is not supported yet.');
-
-    const embeddings = await embedDocuments(pieces.map((p) => p.text));
-
-    const records: ChunkRecord[] = pieces.map((p, i) => ({
-      workspaceId,
-      documentId,
-      documentTitle: title,
-      index: p.index,
-      ...(p.page !== undefined ? { page: p.page } : {}),
-      text: p.text,
-      embedding: embeddings[i]!,
-      createdAt: now,
-    }));
-    await chunks.insertMany(records);
-
-    await documents.updateOne(
-      { _id: documentId },
-      { $set: { status: 'ready', chunkCount: records.length, updatedAt: new Date() } },
-    );
-
-    res.status(201).json({ id: documentId, title, status: 'ready', chunkCount: records.length });
+    await saveFile(documentId, req.file.originalname, req.file.buffer);
+    // jobId = documentId, so the same document can never be queued twice.
+    await ingestQueue.add('ingest', { documentId: documentId.toString() }, { jobId: documentId.toString() });
   } catch (err) {
-    // Leave no half-ingested data behind, and record why it failed for the dashboard.
-    await chunks.deleteMany({ documentId });
-    const message = err instanceof Error ? err.message : 'Ingestion failed';
-    await documents.updateOne({ _id: documentId }, { $set: { status: 'failed', error: message, updatedAt: new Date() } });
-    res.status(422).json({ id: documentId, status: 'failed', error: message });
+    // Couldn't hand it to the worker (e.g. Redis is down). Undo, so nothing sits in "processing" forever.
+    await Promise.all([documents.deleteOne({ _id: documentId }), deleteFile(documentId)]);
+    throw err;
   }
+
+  // 202 Accepted = "received, still working on it". Poll GET /:id until status is "ready" or "failed".
+  res.status(202).json({ id: documentId, title, status: 'processing' });
 });
 
 documentsRouter.get('/', async (req, res) => {
@@ -83,20 +69,26 @@ documentsRouter.get('/', async (req, res) => {
   res.json(list);
 });
 
+documentsRouter.get('/:id', async (req, res) => {
+  const doc = await documents.findOne({ _id: parseId(req.params.id), workspaceId: getWorkspaceId(req) });
+  if (!doc) throw new HttpError(404, 'Document not found');
+  res.json(doc);
+});
+
 documentsRouter.delete('/:id', async (req, res) => {
-  if (!ObjectId.isValid(req.params.id)) {
-    res.status(400).json({ error: 'Invalid document id' });
-    return;
-  }
-  const _id = new ObjectId(req.params.id);
+  const _id = parseId(req.params.id);
   const workspaceId = getWorkspaceId(req);
 
   // Filtering by workspaceId as well as _id means nobody can delete another workspace's document by guessing ids.
   const { deletedCount } = await documents.deleteOne({ _id, workspaceId });
-  if (deletedCount === 0) {
-    res.status(404).json({ error: 'Document not found' });
-    return;
-  }
-  await chunks.deleteMany({ documentId: _id, workspaceId });
+  if (deletedCount === 0) throw new HttpError(404, 'Document not found');
+
+  await Promise.all([
+    chunks.deleteMany({ documentId: _id, workspaceId }),
+    deleteFile(_id),
+    // Drop the job if it hasn't started. If it's running right now, remove() can't touch it,
+    // but the worker notices the document is gone when it finishes and cleans up its chunks.
+    ingestQueue.remove(_id.toString()).catch(() => 0),
+  ]);
   res.status(204).end();
 });

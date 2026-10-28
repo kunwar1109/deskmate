@@ -10,6 +10,8 @@ const EnvSchema = z.object({
   PORT: z.coerce.number().default(4000),
   MONGODB_URI: z.string().min(1, 'MONGODB_URI is required'),
   MONGODB_DB: z.string().default('deskmate'),
+  // Job queue for ingestion. Upstash gives a rediss:// URL (the extra "s" means TLS).
+  REDIS_URL: z.string().regex(/^rediss?:\/\//, 'REDIS_URL must start with redis:// or rediss://'),
   GOOGLE_GENERATIVE_AI_API_KEY: z.string().min(1, 'GOOGLE_GENERATIVE_AI_API_KEY is required'),
   // Flash-Lite: no hidden "thinking" step, so ~1s answers, and its own free-tier quota, separate from Flash.
   CHAT_MODEL: z.string().default('gemini-flash-lite-latest'),

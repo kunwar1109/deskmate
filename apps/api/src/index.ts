@@ -11,6 +11,7 @@ import { UnsupportedFileError } from './lib/extract.js';
 import { authRouter } from './routes/auth.js';
 import { chatRouter } from './routes/chat.js';
 import { documentsRouter } from './routes/documents.js';
+import { ingestQueue } from './queue.js';
 
 const app = express();
 app.use(express.json({ limit: '100kb' }));
@@ -65,6 +66,6 @@ const server = app.listen(env.PORT, () => {
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
-    server.close(() => void closeDb().then(() => process.exit(0)));
+    server.close(() => void Promise.all([closeDb(), ingestQueue.close()]).then(() => process.exit(0)));
   });
 }

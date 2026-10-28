@@ -5,7 +5,9 @@
   "description": "Deskmate API: ingestion, retrieval and chat",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "dev:worker": "tsx watch src/worker.ts",
     "start": "tsx src/index.ts",
+    "start:worker": "tsx src/worker.ts",
     "db:setup": "tsx scripts/create-indexes.ts",
     "typecheck": "tsc"
   },
@@ -14,8 +16,10 @@
     "@ai-sdk/google": "^4.0.106",
     "ai": "^7.0.154",
     "argon2": "^0.45.1",
+    "bullmq": "^6.5.0",
     "cookie-parser": "^1.4.7",
     "express": "^5.3.0",
+    "ioredis": "^6.0.0",
     "jose": "^6.2.13",
     "mongodb": "^7.7.0",
     "multer": "^2.5.0",

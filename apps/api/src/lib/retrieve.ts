@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from 'node:timers/promises';
 import type { ObjectId } from 'mongodb';
 import { VECTOR_INDEX_NAME } from '../config.js';
 import { chunks } from '../db.js';
@@ -44,4 +45,40 @@ export async function retrieve(workspaceId: string, question: string, limit = 5)
       },
     ])
     .toArray();
+}
+
+/**
+ * Atlas Vector Search indexes new vectors a few seconds after they're written. Poll until every chunk of a
+ * document shows up in search, so "ready" means a question asked right now can actually find it.
+ * `exact: true` checks all of this document's chunks instead of an approximate sample, so the count is reliable.
+ */
+export async function waitUntilSearchable(
+  documentId: ObjectId,
+  chunkCount: number,
+  probeVector: number[],
+  timeoutMs = 60_000,
+): Promise<void> {
+  const expected = Math.min(chunkCount, 10_000); // $vectorSearch returns at most 10,000 results
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const [result] = await chunks
+      .aggregate<{ n: number }>([
+        {
+          $vectorSearch: {
+            index: VECTOR_INDEX_NAME,
+            path: 'embedding',
+            queryVector: probeVector,
+            exact: true,
+            limit: expected,
+            filter: { documentId },
+          },
+        },
+        { $count: 'n' },
+      ])
+      .toArray();
+    if ((result?.n ?? 0) >= expected) return;
+    await sleep(1000);
+  }
+  throw new Error('Timed out waiting for the search index to include the new chunks');
 }
