@@ -13,9 +13,9 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@ai-sdk/google": "^4.0.106",
+    "@ai-sdk/google": "4.0.95",
     "@deskmate/shared": "^0.1.0",
-    "ai": "^7.0.154",
+    "ai": "7.0.140",
     "argon2": "^0.45.1",
     "bullmq": "^6.5.0",
     "cookie-parser": "^1.4.7",

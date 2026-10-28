@@ -14,6 +14,7 @@
     "typecheck": "tsc"
   },
   "dependencies": {
+    "ai": "7.0.140",
     "zod": "^4.6.7"
   },
   "license": "MIT"
