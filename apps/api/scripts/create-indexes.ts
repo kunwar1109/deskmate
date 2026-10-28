@@ -3,12 +3,12 @@
  * Run with: npm run db:setup
  */
 import { EMBEDDING_DIMENSIONS, VECTOR_INDEX_NAME } from '../src/config.js';
-import { chunks, closeDb, connectDb, db, documents, memberships, users } from '../src/db.js';
+import { chunks, closeDb, connectDb, db, documents, memberships, tickets, users } from '../src/db.js';
 
 await connectDb();
 
 const existing = new Set((await db.listCollections({}, { nameOnly: true }).toArray()).map((c) => c.name));
-for (const name of ['documents', 'chunks', 'users', 'workspaces', 'memberships']) {
+for (const name of ['documents', 'chunks', 'users', 'workspaces', 'memberships', 'tickets']) {
   if (!existing.has(name)) await db.createCollection(name);
 }
 
@@ -17,6 +17,7 @@ await chunks.createIndex({ documentId: 1 });
 // Unique: the database itself rejects a second account with the same email, even if two signups race.
 await users.createIndex({ email: 1 }, { unique: true });
 await memberships.createIndex({ userId: 1, workspaceId: 1 }, { unique: true });
+await tickets.createIndex({ workspaceId: 1, createdAt: -1 });
 console.log('Regular indexes ready.');
 
 const searchIndexes = await chunks.listSearchIndexes(VECTOR_INDEX_NAME).toArray();

@@ -1,7 +1,7 @@
 "use client";
 
-import type { ChatResponse, HandoffReason, Source } from "@deskmate/shared/chat";
-import { UserRoundIcon } from "lucide-react";
+import type { ChatResponse, HandoffReason, Source, ToolCallTrace } from "@deskmate/shared/chat";
+import { FileSearchIcon, PackageIcon, TicketIcon, UserRoundIcon, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { parseCitations } from "@/lib/chat";
@@ -9,10 +9,18 @@ import { cn } from "@/lib/utils";
 
 // Owner-facing explanations: the customer only ever sees the polite handoff message.
 const HANDOFF_EXPLANATION: Record<HandoffReason, string> = {
-  low_relevance:
-    "No passage scored above the relevance threshold, so the model wasn't asked at all (guardrail 1). Add a document that covers this, or check the wording.",
-  no_answer:
-    "Passages were found, but the model judged they don't answer the question and refused to guess (guardrail 2).",
+  not_in_docs:
+    "The agent searched your docs and they don't answer this, so it refused to guess. Add a document that covers it.",
+  customer_requested: "The customer asked to talk to a person.",
+  needs_human: "This needs a judgment call (a dispute, complaint or account change), so the agent passed it on.",
+  agent_failed: "The agent ended without an answer, for example by hitting its step limit.",
+};
+
+const TOOL_ICON: Record<ToolCallTrace["tool"], LucideIcon> = {
+  searchDocs: FileSearchIcon,
+  lookupOrder: PackageIcon,
+  createTicket: TicketIcon,
+  handoffToHuman: UserRoundIcon,
 };
 
 export function AnswerCard({ turnId, response }: { turnId: string; response: ChatResponse }) {
@@ -51,6 +59,7 @@ export function AnswerCard({ turnId, response }: { turnId: string; response: Cha
           <div>
             <p className="font-medium">Handed off to a human</p>
             {response.handoffReason && <p>{HANDOFF_EXPLANATION[response.handoffReason]}</p>}
+            {response.handoffSummary && <p className="mt-1 italic">Note for your team: {response.handoffSummary}</p>}
             <p className="mt-1 text-amber-800">
               Best match score: {response.topScore === null ? "no passages found" : response.topScore.toFixed(3)}
             </p>
@@ -58,9 +67,20 @@ export function AnswerCard({ turnId, response }: { turnId: string; response: Cha
         </div>
       )}
 
+      {response.toolCalls.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-muted-foreground">How it answered</p>
+          <ol className="space-y-1 text-sm">
+            {response.toolCalls.map((call, i) => (
+              <ToolCallRow key={i} call={call} />
+            ))}
+          </ol>
+        </div>
+      )}
+
       {response.sources.length > 0 && (
         <div className="space-y-2">
-          <p className="text-sm font-medium text-muted-foreground">Retrieved passages</p>
+          <p className="text-sm font-medium text-muted-foreground">Passages the agent was shown</p>
           {response.sources.map((source) => (
             <SourceCard key={source.n} id={sourceId(source.n)} source={source} highlighted={active === source.n} />
           ))}
@@ -73,6 +93,21 @@ export function AnswerCard({ turnId, response }: { turnId: string; response: Cha
           ` · ${response.usage.inputTokens} in / ${response.usage.outputTokens ?? 0} out tokens`}
       </p>
     </div>
+  );
+}
+
+function ToolCallRow({ call }: { call: ToolCallTrace }) {
+  const Icon = TOOL_ICON[call.tool];
+  const detail = Object.values(call.input).filter((v) => typeof v === "string").join(" · ");
+  return (
+    <li className="flex items-start gap-2">
+      <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+      <span>
+        <code className="text-xs font-medium">{call.tool}</code>
+        {detail && <span className="text-muted-foreground"> “{detail}”</span>}
+        <span className="text-muted-foreground"> → {call.summary}</span>
+      </span>
+    </li>
   );
 }
 

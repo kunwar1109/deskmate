@@ -50,6 +50,18 @@ export interface MembershipRecord {
   createdAt: Date;
 }
 
+// Created by the agent's createTicket tool when a customer's problem needs follow-up.
+export interface TicketRecord {
+  _id?: ObjectId;
+  workspaceId: string;
+  number: string; // short, human-friendly, e.g. "T-4F7K2Q"
+  subject: string;
+  summary: string;
+  customerEmail: string;
+  status: 'open' | 'closed';
+  createdAt: Date;
+}
+
 export const client = new MongoClient(env.MONGODB_URI);
 
 export const db = client.db(env.MONGODB_DB);
@@ -58,6 +70,7 @@ export const chunks = db.collection<ChunkRecord>('chunks');
 export const users = db.collection<UserRecord>('users');
 export const workspaces = db.collection<WorkspaceRecord>('workspaces');
 export const memberships = db.collection<MembershipRecord>('memberships');
+export const tickets = db.collection<TicketRecord>('tickets');
 
 export async function connectDb() {
   await client.connect();

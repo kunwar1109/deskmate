@@ -5,7 +5,7 @@ export const ChatBody = z.object({
 });
 export type ChatInput = z.input<typeof ChatBody>;
 
-/** One retrieved passage. `n` matches the [n] citation markers in the answer text. */
+/** One passage the agent was shown. `n` matches the [n] citation markers in the answer text. */
 export interface Source {
   n: number;
   documentId: string;
@@ -16,16 +16,31 @@ export interface Source {
   cited: boolean; // the answer actually referenced [n]
 }
 
-export type HandoffReason = 'low_relevance' | 'no_answer';
+/**
+ * Why the bot handed the chat to a human:
+ * - not_in_docs: it searched and the help docs don't answer the question
+ * - customer_requested: the customer asked for a person
+ * - needs_human: a judgment call the bot shouldn't make (refund disputes, complaints, account changes)
+ * - agent_failed: the agent ended without a usable answer (e.g. hit its step limit)
+ */
+export type HandoffReason = 'not_in_docs' | 'customer_requested' | 'needs_human' | 'agent_failed';
+
+/** One tool the agent used while answering, for the playground's "how it answered" trace. */
+export interface ToolCallTrace {
+  tool: 'searchDocs' | 'lookupOrder' | 'createTicket' | 'handoffToHuman';
+  input: Record<string, unknown>;
+  summary: string; // e.g. "3 passages (best 0.820)" or "order not found"
+}
 
 export interface ChatResponse {
   answer: string;
   sources: Source[];
   handoff: boolean; // true = the bot couldn't answer confidently; phase 3 routes this to a human
-  // Which guardrail caused the handoff: 'low_relevance' = guardrail 1 (retrieval), 'no_answer' = guardrail 2 (model).
   handoffReason?: HandoffReason;
-  // Best retrieval score, kept even on handoff (when sources is empty). Logged so MIN_RELEVANCE can be tuned.
+  handoffSummary?: string; // the agent's one-line note for the human who takes over
+  // Best retrieval score across all searches, before the MIN_RELEVANCE filter. Logged so the threshold can be tuned.
   topScore: number | null;
+  toolCalls: ToolCallTrace[];
   usage?: { inputTokens?: number; outputTokens?: number };
   latencyMs: number;
 }
