@@ -16,7 +16,11 @@ export default function DashboardPage() {
         <Link href="/dashboard/documents" className="font-medium text-foreground underline underline-offset-4">
           Documents
         </Link>{" "}
-        page. The test chat comes next.
+        page, then try questions in the{" "}
+        <Link href="/dashboard/playground" className="font-medium text-foreground underline underline-offset-4">
+          Test chat
+        </Link>
+        .
       </p>
     </div>
   );
