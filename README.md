@@ -176,6 +176,16 @@ Watch the server logs: each reply prints the tools the agent used, the top retri
 
 The agent also handles orders and tickets. Try `Where is my order BB-10234?` and then your email `priya@example.com` as a second message (mock order data in `src/lib/mock-orders.ts`), `I want to talk to a person`, or `My bag arrived torn, my email is priya@example.com`.
 
+## Tests
+
+```bash
+npm test          # all workspaces; about 5 seconds, no Gemini, no Atlas, no Redis
+```
+
+The API has 63 Jest tests: unit tests for the pure logic (chunking, the customer-safe message filter, tokens and origins, rate limits, the model's view of history, error messages) and Supertest tests that call the real Express routes (auth, tenant isolation, uploads, widget settings and CORS, rate limits, visitor chats, human handoff). They run against a throwaway MongoDB (`mongodb-memory-server`, downloaded once), with the AI agent, the job queue and the rate limiter's Redis replaced by fakes, and never read your `.env`.
+
+To check the tests catch real bugs, three were introduced on purpose (the bot answering during a handoff, similarity scores leaking to customers, a missing workspace filter): each one made the matching tests fail.
+
 ## Evals: how good is the bot?
 
 `npm run eval` runs the real agent on a golden set of 54 questions (`apps/api/evals/golden.jsonl`) and grades every answer:
