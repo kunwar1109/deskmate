@@ -2,12 +2,13 @@
 
 An AI customer support platform. A business uploads its help docs, embeds a chat widget on its site, and an AI agent answers customers with cited answers, handing off to a human when it isn't sure.
 
-**Status: Phase 2 in progress — accounts and login done (API only so far).**
+**Status: Phase 2 in progress — accounts, login and background ingestion done (API only so far).**
 
 ## How a question is answered
 
 ```
-Upload:   PDF / .md / .txt ─▶ extract text ─▶ split into ~1000-char chunks ─▶ embed (Gemini) ─▶ MongoDB "chunks"
+Upload:   PDF / .md / .txt ─▶ API saves file (GridFS) + queues job (Redis) ─▶ 202 "processing"
+          Worker: extract text ─▶ split into ~1000-char chunks ─▶ embed (Gemini) ─▶ MongoDB "chunks" ─▶ wait until searchable ─▶ "ready"
 
 Question: "Can I pause?" ─▶ embed question ─▶ $vectorSearch (top 5, filtered by workspace)
                                                   │
@@ -32,6 +33,10 @@ apps/api/
   src/lib/auth.ts         argon2id passwords, JWT session cookie, requireAuth middleware
   src/lib/errors.ts       HttpError classes mapped to status codes
   src/lib/workspace.ts    tenant lookup from the verified session
+  src/lib/ingest.ts       ingestion pipeline (run by the worker; safe to retry)
+  src/lib/files.ts        original uploads in MongoDB GridFS
+  src/queue.ts            BullMQ "ingest" queue (5 attempts, exponential backoff)
+  src/worker.ts           background worker process
   src/routes/auth.ts      signup / login / logout / me
   src/routes/documents.ts upload / list / delete
   src/routes/chat.ts      ask a question
@@ -41,17 +46,19 @@ samples/brewbox-help-center.md  test document
 
 ## Setup
 
-You need Node 22+, a free MongoDB Atlas account and a Google AI Studio key.
+You need Node 22+, a free MongoDB Atlas account, a free Upstash Redis database and a Google AI Studio key.
 
 1. **MongoDB Atlas.** At [cloud.mongodb.com](https://cloud.mongodb.com), create a free **M0** cluster. Under **Database Access**, add a user. Under **Network Access**, add your IP. Click **Connect > Drivers** and copy the connection string.
-2. **Gemini key.** Create one at [aistudio.google.com/apikey](https://aistudio.google.com/apikey).
-3. **Install and configure:**
+2. **Upstash Redis.** At [console.upstash.com](https://console.upstash.com), create a free Redis database (eviction off) and copy its `rediss://` TCP URL.
+3. **Gemini key.** Create one at [aistudio.google.com/apikey](https://aistudio.google.com/apikey).
+4. **Install and configure:**
    ```bash
    npm install
    cd apps/api
-   cp .env.example .env      # paste MONGODB_URI, GOOGLE_GENERATIVE_AI_API_KEY, and a JWT_SECRET (openssl rand -base64 48)
+   cp .env.example .env      # paste MONGODB_URI, REDIS_URL, GOOGLE_GENERATIVE_AI_API_KEY, and a JWT_SECRET (openssl rand -base64 48)
    npm run db:setup          # creates collections and the vector index (takes ~1 min)
-   npm run dev               # http://localhost:4000
+   npm run dev               # terminal 1: API on http://localhost:4000
+   npm run dev:worker        # terminal 2: ingestion worker
    ```
 
 ## Try it
@@ -69,8 +76,11 @@ curl -b cookies.txt -c cookies.txt -X POST localhost:4000/api/auth/logout
 curl -c cookies.txt -X POST localhost:4000/api/auth/login -H "Content-Type: application/json" \
   -d '{"email":"you@example.com","password":"at-least-8-chars"}'
 
-# Upload the sample help center (wait a few seconds before asking: Atlas indexes new vectors asynchronously)
+# Upload the sample help center. Returns 202 with status "processing" right away; the worker does the rest.
 curl -b cookies.txt -F "file=@../../samples/brewbox-help-center.md" -F "title=BrewBox Help Center" localhost:4000/api/documents
+
+# Check status until it says "ready" (about 10 seconds), then ask
+curl -b cookies.txt localhost:4000/api/documents/<id>
 
 # Questions it should answer, with citations
 curl -b cookies.txt -X POST localhost:4000/api/chat -H "Content-Type: application/json" -d '{"question":"How much is the Explorer plan?"}'

@@ -37,7 +37,8 @@ How to work with Rishabh:
 ## Current status
 
 **Phase 1 (core RAG) runs end to end against live Atlas + Gemini.** All five README test questions pass (three cited answers, two correct handoffs). Fixed along the way: free-tier 429s now fail fast with 503/504 instead of hanging; chat model switched to Flash-Lite for speed and quota; chat logs include `topScore` and `handoffReason` even on handoff. 
-**Phase 2 step 1 (accounts + login) is done** and verified with curl: signup/login/logout/me, `/api/documents` and `/api/chat` behind `requireAuth`, tenant isolation checked with two accounts. Known: Atlas indexes new chunks a few seconds after insert, so a question asked instantly after upload finds nothing; the ingestion worker (step 2) should only mark a document `ready` once it is searchable.
+**Phase 2 step 1 (accounts + login) is done** and verified with curl: signup/login/logout/me, `/api/documents` and `/api/chat` behind `requireAuth`, tenant isolation checked with two accounts. 
+**Phase 2 step 2 (background ingestion) is done** and verified: upload returns 202 in ~0.25s, the worker marks the sample `ready` in ~12s and a question asked immediately after is answered (fixes the Atlas indexing delay seen in step 1). Unreadable files fail once with no retries (`UnrecoverableError`); delete during processing leaves no chunks or file; retry-until-final detection checked with a throwaway queue. BullMQ 6 needs `ioredis` installed explicitly (optional peer). Upstash free tier = 500K commands/month, so don't lower the worker's polling settings. Next: step 3, `packages/shared`.
 
 Observed so far: Gemini similarity scores bunch together (on-topic ~0.82, off-topic ~0.81 on the sample doc), so `MIN_RELEVANCE` alone can't separate them; guardrail 2 (`NO_ANSWER`) does most of the work. Tune with more docs and logs.
 
@@ -54,13 +55,17 @@ apps/api/
   src/lib/errors.ts         HttpError / UnauthorizedError / ConflictError, mapped in index.ts
   src/lib/workspace.ts      getWorkspaceId(req) from the verified session
   src/routes/auth.ts        POST signup (transaction: user + workspace + owner membership), login, logout; GET me
-  src/routes/documents.ts   POST / (upload + ingest), GET /, DELETE /:id
+  src/routes/documents.ts   POST / (save to GridFS + queue, 202), GET /, GET /:id (status), DELETE /:id
+  src/lib/ingest.ts         worker pipeline: extract, chunk, embed, replace chunks, waitUntilSearchable, mark ready
+  src/lib/files.ts          GridFS bucket "uploads", file _id = document _id
+  src/queue.ts              BullMQ "ingest" queue on Upstash (REDIS_URL); jobId = documentId
+  src/worker.ts             separate process; concurrency 1; drainDelay 60s + stalledInterval 5m to save Upstash commands
   src/routes/chat.ts        POST / { question } -> { answer, sources, handoff, usage, latencyMs }
   scripts/create-indexes.ts creates collections, indexes, vector index; waits until queryable
 samples/brewbox-help-center.md   fake coffee-subscription help center for testing
 ```
 
-Commands (from `apps/api`): `npm run db:setup`, `npm run dev`, `npm run typecheck`. Test calls are in the root `README.md`.
+Commands (from `apps/api`): `npm run db:setup`, `npm run dev` (API), `npm run dev:worker` (worker, separate terminal), `npm run typecheck`. Test calls are in the root `README.md`.
 
 Two guardrails against hallucination:
 1. If no retrieved chunk scores ≥ `MIN_RELEVANCE` (default 0.7, needs tuning from real logs), return a handoff without calling the LLM.
