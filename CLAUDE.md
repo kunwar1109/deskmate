@@ -38,7 +38,8 @@ How to work with Rishabh:
 
 **Phase 1 (core RAG) runs end to end against live Atlas + Gemini.** All five README test questions pass (three cited answers, two correct handoffs). Fixed along the way: free-tier 429s now fail fast with 503/504 instead of hanging; chat model switched to Flash-Lite for speed and quota; chat logs include `topScore` and `handoffReason` even on handoff. 
 **Phase 2 step 1 (accounts + login) is done** and verified with curl: signup/login/logout/me, `/api/documents` and `/api/chat` behind `requireAuth`, tenant isolation checked with two accounts. 
-**Phase 2 step 2 (background ingestion) is done** and verified: upload returns 202 in ~0.25s, the worker marks the sample `ready` in ~12s and a question asked immediately after is answered (fixes the Atlas indexing delay seen in step 1). Unreadable files fail once with no retries (`UnrecoverableError`); delete during processing leaves no chunks or file; retry-until-final detection checked with a throwaway queue. BullMQ 6 needs `ioredis` installed explicitly (optional peer). Upstash free tier = 500K commands/month, so don't lower the worker's polling settings. Next: step 3, `packages/shared`.
+**Phase 2 step 2 (background ingestion) is done** and verified: upload returns 202 in ~0.25s, the worker marks the sample `ready` in ~12s and a question asked immediately after is answered (fixes the Atlas indexing delay seen in step 1). Unreadable files fail once with no retries (`UnrecoverableError`); delete during processing leaves no chunks or file; retry-until-final detection checked with a throwaway queue. BullMQ 6 needs `ioredis` installed explicitly (optional peer). Upstash free tier = 500K commands/month, so don't lower the worker's polling settings. 
+**Phase 2 step 3 (`packages/shared`) is done**: API validates with the shared schemas and returns the shared types (`DocumentSummary`, `AuthResponse`, `ChatResponse`); renaming a shared field breaks the API typecheck as intended. Next: step 4, `apps/web` (Next.js) login/signup.
 
 Observed so far: Gemini similarity scores bunch together (on-topic ~0.82, off-topic ~0.81 on the sample doc), so `MIN_RELEVANCE` alone can't separate them; guardrail 2 (`NO_ANSWER`) does most of the work. Tune with more docs and logs.
 
@@ -62,8 +63,11 @@ apps/api/
   src/worker.ts             separate process; concurrency 1; drainDelay 60s + stalledInterval 5m to save Upstash commands
   src/routes/chat.ts        POST / { question } -> { answer, sources, handoff, usage, latencyMs }
   scripts/create-indexes.ts creates collections, indexes, vector index; waits until queryable
+packages/shared/                 @deskmate/shared: Zod schemas + API response types (auth, chat, documents, errors)
 samples/brewbox-help-center.md   fake coffee-subscription help center for testing
 ```
+
+`@deskmate/shared` ships TypeScript source with no build step (`exports` map each subpath to `src/*.ts`; tsx and Next.js compile it). Import by subpath, e.g. `@deskmate/shared/auth`; there is no index, so shared files don't need `.js` relative imports. Request schemas and response types live there; DB record types stay in `apps/api/src/db.ts`. API responses use `id` (string), never `_id` or `workspaceId`. Root `npm run typecheck` checks every workspace.
 
 Commands (from `apps/api`): `npm run db:setup`, `npm run dev` (API), `npm run dev:worker` (worker, separate terminal), `npm run typecheck`. Test calls are in the root `README.md`.
 

@@ -2,7 +2,7 @@
 
 An AI customer support platform. A business uploads its help docs, embeds a chat widget on its site, and an AI agent answers customers with cited answers, handing off to a human when it isn't sure.
 
-**Status: Phase 2 in progress — accounts, login and background ingestion done (API only so far).**
+**Status: Phase 2 in progress — accounts, login, background ingestion and shared types done (API only so far).**
 
 ## How a question is answered
 
@@ -41,6 +41,11 @@ apps/api/
   src/routes/documents.ts upload / list / delete
   src/routes/chat.ts      ask a question
   scripts/create-indexes.ts  collections + vector index setup
+packages/shared/
+  src/auth.ts             signup/login Zod schemas, AuthResponse
+  src/chat.ts             ChatBody schema, ChatResponse, Source
+  src/documents.ts        upload limits, DocumentSummary
+  src/errors.ts           ApiError
 samples/brewbox-help-center.md  test document
 ```
 
