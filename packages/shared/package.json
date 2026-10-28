@@ -1,0 +1,20 @@
+{
+  "name": "@deskmate/shared",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Zod schemas and types shared by the API, dashboard and widget",
+  "type": "module",
+  "exports": {
+    "./auth": "./src/auth.ts",
+    "./chat": "./src/chat.ts",
+    "./documents": "./src/documents.ts",
+    "./errors": "./src/errors.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  },
+  "license": "MIT"
+}

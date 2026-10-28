@@ -1,19 +1,34 @@
+import { MAX_UPLOAD_BYTES, type DocumentSummary } from '@deskmate/shared/documents';
 import { Router } from 'express';
 import multer from 'multer';
-import { ObjectId } from 'mongodb';
+import { ObjectId, type WithId } from 'mongodb';
 import { HttpError } from '../lib/errors.js';
 import { detectSourceType } from '../lib/extract.js';
 import { deleteFile, saveFile } from '../lib/files.js';
 import { getWorkspaceId } from '../lib/workspace.js';
-import { chunks, documents } from '../db.js';
+import { chunks, documents, type DocumentRecord } from '../db.js';
 import { ingestQueue } from '../queue.js';
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+  limits: { fileSize: MAX_UPLOAD_BYTES },
 });
 
 export const documentsRouter = Router();
+
+// What clients see. Leaves out workspaceId (internal) and renames Mongo's _id to id.
+function toSummary(doc: WithId<DocumentRecord>): DocumentSummary {
+  return {
+    id: doc._id.toString(),
+    title: doc.title,
+    sourceType: doc.sourceType,
+    status: doc.status,
+    chunkCount: doc.chunkCount,
+    ...(doc.error ? { error: doc.error } : {}),
+    createdAt: doc.createdAt.toISOString(),
+    updatedAt: doc.updatedAt.toISOString(),
+  };
+}
 
 function parseId(id: string): ObjectId {
   if (!ObjectId.isValid(id)) throw new HttpError(400, 'Invalid document id');
@@ -37,7 +52,7 @@ documentsRouter.post('/', upload.single('file'), async (req, res) => {
   // Reject unsupported types now, while the user is still waiting for a response.
   const sourceType = detectSourceType(req.file);
 
-  const { insertedId: documentId } = await documents.insertOne({
+  const record: DocumentRecord = {
     workspaceId,
     title,
     sourceType,
@@ -45,7 +60,8 @@ documentsRouter.post('/', upload.single('file'), async (req, res) => {
     chunkCount: 0,
     createdAt: now,
     updatedAt: now,
-  });
+  };
+  const { insertedId: documentId } = await documents.insertOne(record);
 
   try {
     await saveFile(documentId, req.file.originalname, req.file.buffer);
@@ -58,7 +74,7 @@ documentsRouter.post('/', upload.single('file'), async (req, res) => {
   }
 
   // 202 Accepted = "received, still working on it". Poll GET /:id until status is "ready" or "failed".
-  res.status(202).json({ id: documentId, title, status: 'processing' });
+  res.status(202).json(toSummary({ ...record, _id: documentId }));
 });
 
 documentsRouter.get('/', async (req, res) => {
@@ -66,13 +82,13 @@ documentsRouter.get('/', async (req, res) => {
     .find({ workspaceId: getWorkspaceId(req) })
     .sort({ createdAt: -1 })
     .toArray();
-  res.json(list);
+  res.json(list.map(toSummary));
 });
 
 documentsRouter.get('/:id', async (req, res) => {
   const doc = await documents.findOne({ _id: parseId(req.params.id), workspaceId: getWorkspaceId(req) });
   if (!doc) throw new HttpError(404, 'Document not found');
-  res.json(doc);
+  res.json(toSummary(doc));
 });
 
 documentsRouter.delete('/:id', async (req, res) => {

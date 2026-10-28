@@ -1,13 +1,12 @@
+import type { DocumentStatus, SourceType } from '@deskmate/shared/documents';
 import { MongoClient, type ObjectId } from 'mongodb';
 import { env } from './config.js';
-
-export type DocumentStatus = 'processing' | 'ready' | 'failed';
 
 export interface DocumentRecord {
   _id?: ObjectId;
   workspaceId: string;
   title: string;
-  sourceType: 'pdf' | 'text';
+  sourceType: SourceType;
   status: DocumentStatus;
   chunkCount: number;
   error?: string;

@@ -1,7 +1,7 @@
+import { LoginBody, SignupBody, type AuthResponse } from '@deskmate/shared/auth';
 import { Router } from 'express';
 import { MongoServerError, ObjectId } from 'mongodb';
-import { z } from 'zod';
-import { client, memberships, users, workspaces } from '../db.js';
+import { client, memberships, users, workspaces, type UserRecord, type WorkspaceRecord } from '../db.js';
 import {
   clearSessionCookie,
   createSessionToken,
@@ -13,22 +13,16 @@ import {
 } from '../lib/auth.js';
 import { ConflictError, UnauthorizedError } from '../lib/errors.js';
 
-// Normalize before validating, so " Ana@Mail.com " and "ana@mail.com" are the same account.
-const Email = z.string().trim().toLowerCase().pipe(z.email('Enter a valid email'));
-// The max length stops someone making the server hash a 10 MB "password".
-const Password = z.string().min(8, 'Password must be at least 8 characters').max(200, 'Password is too long');
-
-const SignupBody = z.object({
-  name: z.string().trim().min(1, 'Name is required').max(100),
-  email: Email,
-  password: Password,
-  workspaceName: z.string().trim().min(1, 'Workspace name is required').max(100),
-});
-
-const LoginBody = z.object({
-  email: Email,
-  password: z.string().min(1, 'Password is required').max(200),
-});
+// The one place that decides what a client sees about a user: id, name, email. Never the password hash.
+function toAuthResponse(
+  user: Pick<UserRecord, 'name' | 'email'> & { _id: ObjectId },
+  workspace: Pick<WorkspaceRecord, 'name'> & { _id: ObjectId },
+): AuthResponse {
+  return {
+    user: { id: user._id.toString(), name: user.name, email: user.email },
+    workspace: { id: workspace._id.toString(), name: workspace.name },
+  };
+}
 
 // Hashed once at startup. Login checks against it when the email doesn't exist, so "unknown email"
 // takes as long as "wrong password" and response time can't reveal who has an account.
@@ -63,10 +57,9 @@ authRouter.post('/signup', async (req, res) => {
   }
 
   setSessionCookie(res, await createSessionToken({ userId: userId.toString(), workspaceId: workspaceId.toString() }));
-  res.status(201).json({
-    user: { id: userId, name: body.name, email: body.email },
-    workspace: { id: workspaceId, name: body.workspaceName },
-  });
+  res.status(201).json(
+    toAuthResponse({ _id: userId, name: body.name, email: body.email }, { _id: workspaceId, name: body.workspaceName }),
+  );
 });
 
 authRouter.post('/login', async (req, res) => {
@@ -82,10 +75,7 @@ authRouter.post('/login', async (req, res) => {
   if (!workspace) throw new Error(`User ${user._id.toString()} has no workspace`);
 
   setSessionCookie(res, await createSessionToken({ userId: user._id.toString(), workspaceId: workspace._id.toString() }));
-  res.json({
-    user: { id: user._id, name: user.name, email: user.email },
-    workspace: { id: workspace._id, name: workspace.name },
-  });
+  res.json(toAuthResponse(user, workspace));
 });
 
 authRouter.post('/logout', (_req, res) => {
@@ -105,8 +95,5 @@ authRouter.get('/me', requireAuth, async (req, res) => {
     clearSessionCookie(res);
     throw new UnauthorizedError();
   }
-  res.json({
-    user: { id: user._id, name: user.name, email: user.email },
-    workspace: { id: workspace._id, name: workspace.name },
-  });
+  res.json(toAuthResponse(user, workspace));
 });

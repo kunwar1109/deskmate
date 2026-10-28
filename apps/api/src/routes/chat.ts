@@ -1,11 +1,7 @@
+import { ChatBody } from '@deskmate/shared/chat';
 import { Router } from 'express';
-import { z } from 'zod';
 import { answerQuestion } from '../lib/answer.js';
 import { getWorkspaceId } from '../lib/workspace.js';
-
-const ChatBody = z.object({
-  question: z.string().trim().min(1, 'Ask a question').max(2000, 'Question is too long'),
-});
 
 export const chatRouter = Router();
 

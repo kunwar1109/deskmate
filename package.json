@@ -1,5 +1,11 @@
 {
   "name": "deskmate",
   "private": true,
-  "workspaces": ["apps/*"]
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  }
 }
