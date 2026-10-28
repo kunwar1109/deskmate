@@ -36,7 +36,9 @@ How to work with Rishabh:
 
 ## Current status
 
-**Phase 1 (core RAG) is written and type-checks. It has NOT yet been run against live Atlas + Gemini.** First job: help Rishabh run it end to end and fix anything that breaks.
+**Phase 1 (core RAG) runs end to end against live Atlas + Gemini.** All five README test questions pass (three cited answers, two correct handoffs). Fixed along the way: free-tier 429s now fail fast with 503/504 instead of hanging; chat model switched to Flash-Lite for speed and quota; chat logs include `topScore` and `handoffReason` even on handoff. Next: Phase 2.
+
+Observed so far: Gemini similarity scores bunch together (on-topic ~0.82, off-topic ~0.81 on the sample doc), so `MIN_RELEVANCE` alone can't separate them; guardrail 2 (`NO_ANSWER`) does most of the work. Tune with more docs and logs.
 
 ```
 apps/api/
