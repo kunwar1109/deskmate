@@ -1,0 +1,5 @@
+{
+  "name": "deskmate",
+  "private": true,
+  "workspaces": ["apps/*"]
+}
