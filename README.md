@@ -2,7 +2,7 @@
 
 An AI customer support platform. A business uploads its help docs, embeds a chat widget on its site, and an AI agent answers customers with cited answers, handing off to a human when it isn't sure.
 
-**Status: Phase 2 in progress — API (accounts, background ingestion) and dashboard (login, signup, documents) are done.**
+**Status: Phase 2 complete — accounts and workspaces, background ingestion, and a dashboard with documents and a test-chat playground.**
 
 ## How a question is answered
 
@@ -73,7 +73,7 @@ You need Node 22+, a free MongoDB Atlas account, a free Upstash Redis database a
 
 ## Try it
 
-In the browser: open http://localhost:3000, sign up, then go to **Documents** and drop in `samples/brewbox-help-center.md`. It shows *Processing* and switches to *Ready* by itself after a few seconds.
+In the browser: open http://localhost:3000, sign up, then go to **Documents** and drop in `samples/brewbox-help-center.md`. It shows *Processing* and switches to *Ready* by itself after a few seconds. Then open **Test chat** and ask a question: the answer shows clickable citations, the passages it used with their scores, and an explanation whenever it hands off.
 
 With curl (talks to the API directly):
 
@@ -118,7 +118,7 @@ Watch the server logs: each chat prints the top retrieval score, latency and tok
 ## Roadmap
 
 - [x] Phase 1: ingestion, vector search, grounded answers with citations, relevance guardrail
-- [ ] Phase 2: JWT auth, workspaces, background ingestion queue, Next.js dashboard
+- [x] Phase 2: JWT auth, workspaces, background ingestion queue, Next.js dashboard
 - [ ] Phase 3: embeddable widget, agent tools, streaming, live human handoff (Socket.io)
 - [ ] Phase 4: eval suite in CI, Jest / Supertest / Playwright, Sentry
 - [ ] Phase 5: MCP server, deployment, demo video
