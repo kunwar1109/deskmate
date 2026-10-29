@@ -38,6 +38,8 @@ await workspaces.createIndex(
 await conversations.createIndex({ workspaceId: 1, updatedAt: -1 });
 // Loading a chat's history: every message of one conversation, oldest first.
 await messages.createIndex({ conversationId: 1, createdAt: 1 });
+// Dashboard metrics: one workspace's messages in a date range.
+await messages.createIndex({ workspaceId: 1, createdAt: -1 });
 console.log('Regular indexes ready.');
 
 const searchIndexes = await chunks.listSearchIndexes(VECTOR_INDEX_NAME).toArray();

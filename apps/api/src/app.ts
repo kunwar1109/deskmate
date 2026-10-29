@@ -11,6 +11,7 @@ import { UnsupportedFileError } from './lib/extract.js';
 import { authRouter } from './routes/auth.js';
 import { conversationsRouter } from './routes/conversations.js';
 import { documentsRouter } from './routes/documents.js';
+import { metricsRouter } from './routes/metrics.js';
 import { publicRouter } from './routes/public.js';
 import { realtimeRouter } from './routes/realtime.js';
 import { widgetRouter } from './routes/widget.js';
@@ -55,6 +56,7 @@ export function createApp(): Express {
   app.use('/api/conversations', requireAuth, conversationsRouter);
   app.use('/api/widget', requireAuth, widgetRouter);
   app.use('/api/realtime', requireAuth, realtimeRouter);
+  app.use('/api/metrics', requireAuth, metricsRouter);
 
   // Express 5 forwards errors from async handlers here automatically.
   const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {

@@ -1,9 +1,11 @@
 import type { Conversation, ConversationStatus, DeskmateUIMessage, HumanSender } from '@deskmate/shared/chat';
 import { createUIMessageStream, generateId, type InferUIMessageChunk } from 'ai';
 import { ObjectId, type WithId } from 'mongodb';
+import { env } from '../config.js';
 import { conversations, messages, workspaces, type ConversationRecord, type MessageRecord } from '../db.js';
 import { publishConversation, publishMessage, publishStatus } from '../realtime.js';
 import { streamSupportAgent, type AgentReply } from './agent.js';
+import { estimateCostUsd } from './cost.js';
 import { HttpError } from './errors.js';
 
 /**
@@ -168,6 +170,7 @@ export async function replyToMessage(conversation: WithId<ConversationRecord>, t
       console.log(
         JSON.stringify({
           event: 'chat',
+          workspaceId,
           channel: conversation.channel,
           conversationId: conversation._id.toString(),
           errored,
@@ -177,6 +180,11 @@ export async function replyToMessage(conversation: WithId<ConversationRecord>, t
           tools: message.parts.flatMap((part) => (part.type.startsWith('tool-') ? [part.type.slice(5)] : [])),
           latencyMs: message.metadata?.latencyMs,
           usage: message.metadata?.usage,
+          model: env.CHAT_MODEL,
+          estimatedCostUsd: estimateCostUsd({
+            input: message.metadata?.usage?.inputTokens ?? 0,
+            output: message.metadata?.usage?.outputTokens ?? 0,
+          }),
         }),
       );
     } catch (err) {

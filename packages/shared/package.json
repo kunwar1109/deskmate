@@ -10,7 +10,8 @@
     "./documents": "./src/documents.ts",
     "./errors": "./src/errors.ts",
     "./widget": "./src/widget.ts",
-    "./realtime": "./src/realtime.ts"
+    "./realtime": "./src/realtime.ts",
+    "./metrics": "./src/metrics.ts"
   },
   "scripts": {
     "typecheck": "tsc"
