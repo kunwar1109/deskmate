@@ -33,6 +33,13 @@ const EnvSchema = z.object({
   // How many proxies (load balancer, CDN) sit in front of the API. Express needs this to read the real
   // client IP from X-Forwarded-For. 0 locally; on Render or Railway it's usually 1. Too high lets clients fake their IP.
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(0),
+  // A header the host's edge overwrites with the visitor's IP on every request, used instead of
+  // X-Forwarded-For when present. On Render: cf-connecting-ip (Cloudflare). Never set this on a host that
+  // doesn't overwrite it, or clients choose their own IP. Empty = off.
+  CLIENT_IP_HEADER: z
+    .string()
+    .optional()
+    .transform((header) => header?.trim().toLowerCase() || undefined),
   // Where browsers reach this API. Goes into the widget snippet (<script src="PUBLIC_URL/widget.js">).
   // Sentry error tracking (sentry.io > Settings > Projects > deskmate-api > Client Keys). Optional: without it,
   // errors only go to the console. Not a secret (it only lets someone send errors in, not read them).

@@ -27,8 +27,13 @@ services:
         value: production # HTTPS-only session cookie
       - key: WORKER_IN_API
         value: 'true'
+      # Visitor IPs for per-IP rate limits. Render's public services sit behind Cloudflare, which overwrites
+      # CF-Connecting-IP on every request. X-Forwarded-For alone gave a different Cloudflare address per
+      # request, so the limits never triggered (src/lib/client-ip.ts). TRUST_PROXY_HOPS is the fallback.
+      - key: CLIENT_IP_HEADER
+        value: cf-connecting-ip
       - key: TRUST_PROXY_HOPS
-        value: '1' # Render's load balancer
+        value: '1'
       - key: MONGODB_DB
         value: deskmate_prod # same Atlas cluster as dev, separate database
       - key: QUEUE_PREFIX

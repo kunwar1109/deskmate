@@ -72,4 +72,19 @@ describe('widget settings and the public widget API', () => {
     const limited = await send().expect(429);
     expect(Number(limited.headers['retry-after'])).toBeGreaterThan(0);
   });
+
+  it('counts per visitor from CLIENT_IP_HEADER, which the host sets, and never from X-Forwarded-For', async () => {
+    const { key } = await ownerWithWidget();
+    const chat = (await request(app).post(`/api/public/w/${key}/conversations`).expect(201)).body;
+    const send = (ip: string) =>
+      request(app)
+        .post(`/api/public/w/${key}/conversations/${chat.conversationId}/messages`)
+        .set('Authorization', `Bearer ${chat.visitorToken}`)
+        .set('x-test-client-ip', ip)
+        .set('X-Forwarded-For', `198.51.100.${Math.floor(Math.random() * 250)}`) // changes every time: ignored
+        .send({ text: '' });
+    for (let i = 0; i < 10; i++) await send('203.0.113.1').expect(400);
+    await send('203.0.113.1').expect(429);
+    await send('203.0.113.2').expect(400); // another visitor has their own allowance
+  });
 });

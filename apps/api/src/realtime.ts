@@ -6,6 +6,7 @@ import { Server, type Namespace, type Socket } from 'socket.io';
 import { env, RATE_LIMITS } from './config.js';
 import { conversations, workspaces } from './db.js';
 import { readRealtimeTicket } from './lib/auth.js';
+import { headerIp } from './lib/client-ip.js';
 import { toWidgetMessage } from './lib/public-messages.js';
 import { checkRateLimit } from './lib/rate-limit.js';
 import { isOriginAllowed, tokenMatches } from './lib/widget.js';
@@ -26,8 +27,10 @@ const visitorRoom = (conversationId: string) => `visitor:${conversationId}`;
 let agents: Namespace<Record<string, never>, AgentServerEvents> | undefined;
 let visitors: Namespace<Record<string, never>, VisitorServerEvents> | undefined;
 
-/** The client's IP from the handshake, honouring TRUST_PROXY_HOPS like Express does for HTTP requests. */
+/** The client's IP from the handshake, worked out like byIp does for HTTP requests. */
 function handshakeIp(socket: Socket): string {
+  const fromHeader = headerIp(socket.handshake.headers);
+  if (fromHeader) return fromHeader;
   const forwarded = socket.handshake.headers['x-forwarded-for'];
   if (env.TRUST_PROXY_HOPS > 0 && typeof forwarded === 'string') {
     const hops = forwarded.split(',').map((ip) => ip.trim());

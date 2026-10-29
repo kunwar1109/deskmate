@@ -1,6 +1,7 @@
 import type { Request, RequestHandler, Response } from 'express';
 import { Redis, type Result } from 'ioredis';
 import { env } from '../config.js';
+import { headerIp } from './client-ip.js';
 import { RateLimitError } from './errors.js';
 
 // Count one request in a fixed window: INCR the counter, and on the first hit start the window's timer.
@@ -87,5 +88,5 @@ export async function checkRateLimit({ name, limit, windowSeconds }: Omit<RateLi
   if (count > limit) throw new RateLimitError(ttl > 0 ? ttl : windowSeconds);
 }
 
-/** The client's IP. Behind a proxy this is only right when TRUST_PROXY_HOPS is set (see index.ts). */
-export const byIp = (req: Request) => req.ip ?? 'unknown';
+/** The client's IP: CLIENT_IP_HEADER when the host sets it, else req.ip (right behind a proxy only with TRUST_PROXY_HOPS). */
+export const byIp = (req: Request) => headerIp(req.headers) ?? req.ip ?? 'unknown';
