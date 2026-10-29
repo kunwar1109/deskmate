@@ -44,6 +44,11 @@ jobs:
     name: End-to-end (Playwright)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # On main, this job and the evals use the same Gemini key: 15 requests a minute on the free tier. Run at
+    # once, they pushed each other into 429s (2 flaky tests on 2026-10-29). Sharing a group makes them take turns.
+    concurrency:
+      group: ${{ github.ref == 'refs/heads/main' && 'gemini-free-tier' || format('e2e-{0}', github.ref) }}
+      cancel-in-progress: false
     services:
       mongodb:
         # MongoDB 8.0 with Atlas Search and Vector Search, like the free Atlas tier. Has its own health check,

@@ -15,6 +15,11 @@ on:
       - packages/shared/src/chat.ts
       - samples/**
   workflow_dispatch: # the "Run workflow" button
+    inputs:
+      only:
+        description: 'Case ids to run, comma-separated (empty = all cases)'
+        required: false
+        default: ''
 
 concurrency:
   group: evals
@@ -28,6 +33,10 @@ jobs:
     name: Agent evals
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    # Takes turns with CI's E2E job on main: both use the same Gemini key (see ci.yml).
+    concurrency:
+      group: gemini-free-tier
+      cancel-in-progress: false
     services:
       mongodb:
         image: mongodb/mongodb-atlas-local:8.0.30-20261013T085210Z
@@ -49,7 +58,12 @@ jobs:
           echo "::add-mask::$secret"
           echo "JWT_SECRET=$secret" >> "$GITHUB_ENV"
       - run: npm run db:setup -w apps/api # collections, indexes and the vector index in the fresh database
-      - run: npm run eval
+      # The input reaches the shell as an environment variable, never pasted into the script itself:
+      # ${{ inputs.only }} inside `run:` would let a crafted value run its own commands.
+      - name: Run the eval
+        env:
+          ONLY: ${{ inputs.only }}
+        run: npm run eval -- ${ONLY:+--only "$ONLY"}
       # The per-case results (answers, scores, judge reasons), whether the run passed or not.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
