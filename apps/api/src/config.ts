@@ -18,6 +18,9 @@ const EnvSchema = z.object({
   // Namespace for the queue's Redis keys. Two setups sharing one Redis (dev and the E2E tests) need different
   // prefixes, or one's worker takes the other's jobs and looks for the document in the wrong database.
   QUEUE_PREFIX: z.string().min(1).default('bull'),
+  // Run the ingestion worker inside the API process instead of its own (npm run start:worker). For hosts
+  // without background workers, like Render's free plan. Costs: a big PDF being embedded shares the API's CPU.
+  WORKER_IN_API: z.stringbool().default(false),
   GOOGLE_GENERATIVE_AI_API_KEY: z.string().min(1, 'GOOGLE_GENERATIVE_AI_API_KEY is required'),
   // Flash-Lite: no hidden "thinking" step, so ~1s answers, and its own free-tier quota, separate from Flash.
   CHAT_MODEL: z.string().default('gemini-flash-lite-latest'),
