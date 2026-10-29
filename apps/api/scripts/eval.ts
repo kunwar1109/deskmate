@@ -71,6 +71,9 @@ interface Grade {
   reasonCorrect?: boolean;
   faithful?: boolean;
   unsupportedClaims?: string[];
+  // What the judge was shown when it rejected an answer, so a failure can be checked by a person: was the
+  // answer wrong, or the judge? Kept only for failures, to keep the results file small.
+  judgeContext?: { passages: { n: number; text: string }[]; toolResults: unknown[] };
   cited?: boolean;
   tools: string[];
   latencyMs?: number;
@@ -297,10 +300,12 @@ async function gradeCase(workspaceId: string, c: Case): Promise<Grade> {
   // Faithfulness: only answers make claims. A handoff shows the customer a fixed message.
   if (!handedOff && answer) {
     try {
-      const verdict = await judgeFaithfulness(c.question, answer, { passages: passages.map(({ n, text: t }) => ({ n, text: t })), toolResults });
+      const judgeContext = { passages: passages.map(({ n, text: t }) => ({ n, text: t })), toolResults };
+      const verdict = await judgeFaithfulness(c.question, answer, judgeContext);
       grade.faithful = verdict.supported;
       if (!verdict.supported) {
         grade.unsupportedClaims = verdict.unsupportedClaims;
+        grade.judgeContext = judgeContext;
         fail(`unsupported: ${verdict.unsupportedClaims.join('; ')}`);
       }
     } catch (err) {
