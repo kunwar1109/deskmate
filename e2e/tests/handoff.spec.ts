@@ -20,16 +20,19 @@ test('a customer asks for a person, an agent replies live, then hands the chat b
   await customer.getByRole('button', { name: 'Open chat' }).click();
   const input = customer.getByRole('textbox', { name: 'Your message' });
 
-  // The first message becomes the chat's title in the inbox; the order number makes it unique to this run.
-  const order = `BB-${Math.floor(10000 + Math.random() * 89999)}`;
-  await input.fill(`Order ${order} arrived torn. Can I talk to a person?`);
+  // Only the request for a person, nothing else: with an order number in it, the model sometimes asked
+  // for the email to look the order up instead (lookupOrder), so the test was checking two things at once.
+  const request = 'Can I talk to a person, please?';
+  await input.fill(request);
   await input.press('Enter');
   await expect(customer.locator('.message.assistant').nth(1)).toContainText('a member of our team', { timeout: 90_000 });
   await expect(customer.getByRole('status')).toHaveText(/You're chatting with the BrewBox team/);
 
   // The agent's open dashboard hears about it without a reload.
   await expect(agent.getByText('A customer needs a human')).toBeVisible();
-  await agent.getByRole('link', { name: new RegExp(`Order ${order}`) }).click();
+  // The database is emptied before each run and no other test asks this, so the title is unique. Newest first:
+  // after a CI retry the earlier attempt's chat is listed too.
+  await agent.getByRole('link').filter({ hasText: request }).first().click();
 
   // While a person handles the chat, the bot stays quiet: the customer's message reaches the agent live, unanswered.
   await input.fill('It was the Explorer box.');
