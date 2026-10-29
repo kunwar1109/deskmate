@@ -29,6 +29,13 @@ test.describe('asking questions', { tag: '@ai' }, () => {
       await expect(page).toHaveURL(/\?c=/);
       await page.reload();
       await expect(page.getByText('How much is the Explorer plan?')).toBeVisible();
+
+      // The overview counts the reply: its real latency and Gemini token usage, stored with it, add up there.
+      await page.goto('/dashboard');
+      const row = page.getByRole('row').filter({ has: page.getByRole('link', { name: 'How much is the Explorer plan?' }) });
+      await expect(row).toBeVisible();
+      await expect(row.getByRole('cell').nth(4)).toHaveText(/^\$0\.0\d+$/); // fractions of a cent, never $0
+      await expect(page.getByText('Response time (median)')).toBeVisible();
     });
   });
 
