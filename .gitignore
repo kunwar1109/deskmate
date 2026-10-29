@@ -5,3 +5,7 @@ dist
 .DS_Store
 cookies.txt
 apps/api/evals/results/
+# Playwright: login state written by the setup project, reports and failure traces
+e2e/.auth/
+e2e/test-results/
+e2e/playwright-report/

@@ -3,7 +3,8 @@
   "private": true,
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/*",
+    "e2e"
   ],
   "scripts": {
     "dev:api": "npm run dev -w apps/api",
@@ -13,6 +14,8 @@
     "dev:widget": "npm run dev -w apps/widget",
     "build:widget": "npm run build -w apps/widget",
     "eval": "npm run eval -w apps/api",
-    "test": "npm run test --workspaces --if-present"
+    "test": "npm run test --workspaces --if-present",
+    "test:e2e": "npm run e2e -w e2e --",
+    "test:e2e:fast": "npm run e2e:fast -w e2e --"
   }
 }

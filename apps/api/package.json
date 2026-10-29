@@ -11,7 +11,8 @@
     "db:setup": "tsx scripts/create-indexes.ts",
     "typecheck": "tsc",
     "eval": "tsx scripts/eval.ts",
-    "test": "NODE_OPTIONS=\"--experimental-vm-modules --disable-warning=ExperimentalWarning\" jest"
+    "test": "NODE_OPTIONS=\"--experimental-vm-modules --disable-warning=ExperimentalWarning\" jest",
+    "e2e:prepare": "tsx scripts/create-indexes.ts && tsx scripts/e2e-reset.ts"
   },
   "license": "MIT",
   "dependencies": {

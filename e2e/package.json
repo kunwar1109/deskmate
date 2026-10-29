@@ -1,0 +1,20 @@
+{
+  "name": "@deskmate/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "description": "End-to-end tests: the real API, worker, dashboard and widget in a real browser",
+  "type": "module",
+  "scripts": {
+    "e2e": "playwright test",
+    "typecheck": "tsc --noEmit",
+    "e2e:fast": "playwright test --grep-invert @ai --no-deps"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@types/node": "22.19.1",
+    "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "@deskmate/shared": "^0.1.0"
+  }
+}
