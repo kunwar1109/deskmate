@@ -6,6 +6,9 @@
     "packages/*",
     "e2e"
   ],
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev:api": "npm run dev -w apps/api",
     "dev:worker": "npm run dev:worker -w apps/api",
