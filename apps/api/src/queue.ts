@@ -16,8 +16,11 @@ export interface IngestJobData {
 // their long "wait for a job" call must not be cut off by ioredis' per-command retry limit.
 export const redisConnection = { url: env.REDIS_URL, maxRetriesPerRequest: null };
 
+// Shared by the Queue (API side) and the Worker: both must use the same prefix to see the same jobs.
+export const queueOptions = { connection: redisConnection, prefix: env.QUEUE_PREFIX };
+
 export const ingestQueue = new Queue<IngestJobData>(INGEST_QUEUE, {
-  connection: redisConnection,
+  ...queueOptions,
   defaultJobOptions: {
     attempts: 5,
     backoff: { type: 'exponential', delay: 10_000 }, // waits 10s, 20s, 40s, 80s: outlasts per-minute rate limits

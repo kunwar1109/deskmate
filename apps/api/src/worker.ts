@@ -8,7 +8,7 @@ import { UnrecoverableError, Worker } from 'bullmq';
 import { ObjectId } from 'mongodb';
 import { closeDb, connectDb } from './db.js';
 import { ingestDocument, markFailed } from './lib/ingest.js';
-import { INGEST_QUEUE, redisConnection, type IngestJobData } from './queue.js';
+import { INGEST_QUEUE, queueOptions, type IngestJobData } from './queue.js';
 
 await connectDb();
 
@@ -16,7 +16,7 @@ const worker = new Worker<IngestJobData>(
   INGEST_QUEUE,
   async (job) => ingestDocument(new ObjectId(job.data.documentId)),
   {
-    connection: redisConnection,
+    ...queueOptions,
     concurrency: 1, // one document at a time keeps us under Gemini's free-tier embedding limits
     // Upstash's free tier counts every Redis command (500K/month), and an idle worker keeps asking Redis
     // "any jobs?". Wait up to 60s per ask instead of 5s, and check for crashed jobs every 5 min instead of 30s.

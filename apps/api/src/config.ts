@@ -15,6 +15,9 @@ const EnvSchema = z.object({
   MONGODB_DB: z.string().default('deskmate'),
   // Job queue for ingestion. Upstash gives a rediss:// URL (the extra "s" means TLS).
   REDIS_URL: z.string().regex(/^rediss?:\/\//, 'REDIS_URL must start with redis:// or rediss://'),
+  // Namespace for the queue's Redis keys. Two setups sharing one Redis (dev and the E2E tests) need different
+  // prefixes, or one's worker takes the other's jobs and looks for the document in the wrong database.
+  QUEUE_PREFIX: z.string().min(1).default('bull'),
   GOOGLE_GENERATIVE_AI_API_KEY: z.string().min(1, 'GOOGLE_GENERATIVE_AI_API_KEY is required'),
   // Flash-Lite: no hidden "thinking" step, so ~1s answers, and its own free-tier quota, separate from Flash.
   CHAT_MODEL: z.string().default('gemini-flash-lite-latest'),
