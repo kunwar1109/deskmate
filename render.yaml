@@ -19,9 +19,9 @@ services:
     startCommand: npm run start -w apps/api
     healthCheckPath: /health
     autoDeployTrigger: off
-    # On a deploy or restart, SIGTERM lets the current ingestion job finish (src/index.ts). Give it 2 minutes
-    # instead of the default 30 seconds; a job cut off anyway is picked up again by BullMQ's stalled check.
-    maxShutdownDelaySeconds: 120
+    # On a deploy or restart, SIGTERM lets the current ingestion job finish (src/index.ts) within Render's
+    # 30-second grace period (free services can't raise it). A job cut off anyway is picked up again by
+    # BullMQ's stalled-job check after the restart.
     envVars:
       - key: NODE_ENV
         value: production # HTTPS-only session cookie
