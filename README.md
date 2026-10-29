@@ -1,5 +1,7 @@
 # Deskmate
 
+[![CI](https://github.com/kunwar1109/deskmate/actions/workflows/ci.yml/badge.svg)](https://github.com/kunwar1109/deskmate/actions/workflows/ci.yml)
+
 An AI customer support platform. A business uploads its help docs, embeds a chat widget on its site, and an AI agent answers customers with cited answers, handing off to a human when it isn't sure.
 
 **Status: Phase 3 complete: a tool-using support agent with saved, streamed conversations, an embeddable chat widget, and a live inbox where a person takes over when the bot hands off. Next: Phase 4 (evals, tests, CI).**

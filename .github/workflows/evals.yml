@@ -1,0 +1,59 @@
+# The agent eval suite (54 golden questions, graded; see apps/api/scripts/eval.ts). Fails below its thresholds.
+#
+# Slow (minutes to tens of minutes on Gemini's free tier) and uses the daily quota, so it does not run on
+# every push: only when code that can change answers lands on main, or by hand from the Actions tab.
+name: Evals
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/api/src/lib/**
+      - apps/api/src/config.ts
+      - apps/api/evals/**
+      - apps/api/scripts/eval.ts
+      - packages/shared/src/chat.ts
+      - samples/**
+  workflow_dispatch: # the "Run workflow" button
+
+concurrency:
+  group: evals
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  evals:
+    name: Agent evals
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    services:
+      mongodb:
+        image: mongodb/mongodb-atlas-local:8.0.30-20261013T085210Z
+        ports: ['27017:27017']
+    env:
+      MONGODB_URI: mongodb://localhost:27017/?directConnection=true
+      REDIS_URL: redis://localhost:6379 # required by config; the eval ingests directly, without the queue
+      GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Session secret for this run only
+        run: |
+          secret=$(openssl rand -base64 48)
+          echo "::add-mask::$secret"
+          echo "JWT_SECRET=$secret" >> "$GITHUB_ENV"
+      - run: npm run db:setup -w apps/api # collections, indexes and the vector index in the fresh database
+      - run: npm run eval
+      # The per-case results (answers, scores, judge reasons), whether the run passed or not.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: eval-results
+          path: apps/api/evals/results/
+          retention-days: 30
