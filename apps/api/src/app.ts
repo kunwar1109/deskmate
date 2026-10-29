@@ -7,6 +7,7 @@ import { ZodError } from 'zod';
 import { env } from './config.js';
 import { requireAuth } from './lib/auth.js';
 import { HttpError, RateLimitError } from './lib/errors.js';
+import { reportError } from './lib/monitoring.js';
 import { UnsupportedFileError } from './lib/extract.js';
 import { authRouter } from './routes/auth.js';
 import { conversationsRouter } from './routes/conversations.js';
@@ -59,7 +60,7 @@ export function createApp(): Express {
   app.use('/api/metrics', requireAuth, metricsRouter);
 
   // Express 5 forwards errors from async handlers here automatically.
-  const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
+  const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     if (err instanceof HttpError) {
       if (err instanceof RateLimitError) res.setHeader('Retry-After', String(err.retryAfterSeconds));
       res.status(err.status).json({ error: err.message });
@@ -83,7 +84,9 @@ export function createApp(): Express {
     }
     // AI failures (Gemini 429s, timeouts) happen mid-stream, after "200 OK" is sent, so they're handled
     // in lib/ai-errors.ts and reach the client inside the stream, not here.
+    // Everything above is an expected answer (bad input, not found, too large). This is a bug: report it.
     console.error(err);
+    reportError(err, { ...(req.auth ? { workspaceId: req.auth.workspaceId, userId: req.auth.userId } : {}) });
     res.status(500).json({ error: 'Something went wrong' });
   };
   app.use(errorHandler);

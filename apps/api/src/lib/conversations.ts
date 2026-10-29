@@ -6,6 +6,7 @@ import { conversations, messages, workspaces, type ConversationRecord, type Mess
 import { publishConversation, publishMessage, publishStatus } from '../realtime.js';
 import { streamSupportAgent, type AgentReply } from './agent.js';
 import { estimateCostUsd } from './cost.js';
+import { reportError } from './monitoring.js';
 import { HttpError } from './errors.js';
 
 /**
@@ -189,6 +190,7 @@ export async function replyToMessage(conversation: WithId<ConversationRecord>, t
       );
     } catch (err) {
       console.error('Failed to save reply', err);
+      reportError(err, { workspaceId, tags: { stage: 'save_reply' } });
     }
   }
 

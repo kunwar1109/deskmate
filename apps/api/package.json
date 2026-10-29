@@ -4,10 +4,10 @@
   "private": true,
   "description": "Deskmate API: ingestion, retrieval and chat",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "dev:worker": "tsx watch src/worker.ts",
-    "start": "tsx src/index.ts",
-    "start:worker": "tsx src/worker.ts",
+    "dev": "tsx watch --import ./src/instrument.ts src/index.ts",
+    "dev:worker": "tsx watch --import ./src/instrument.ts src/worker.ts",
+    "start": "tsx --import ./src/instrument.ts src/index.ts",
+    "start:worker": "tsx --import ./src/instrument.ts src/worker.ts",
     "db:setup": "tsx scripts/create-indexes.ts",
     "typecheck": "tsc",
     "eval": "tsx scripts/eval.ts",
@@ -18,6 +18,7 @@
   "dependencies": {
     "@ai-sdk/google": "4.0.95",
     "@deskmate/shared": "^0.1.0",
+    "@sentry/node": "11.8.0",
     "ai": "7.0.140",
     "argon2": "^0.45.1",
     "bullmq": "^6.5.0",

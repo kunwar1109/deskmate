@@ -23,6 +23,8 @@ const apiEnv = {
   // Lets each test claim its own client IP via X-Forwarded-For (see fixtures.ts), so per-IP rate limits
   // don't carry over between tests and runs. The dev API keeps 0: there, clients can't pick their IP.
   TRUST_PROXY_HOPS: '1',
+  // Test runs don't report to Sentry (some tests fail on purpose while being written; Playwright keeps the traces).
+  SENTRY_DSN: '',
 };
 
 export default defineConfig({
@@ -68,7 +70,7 @@ export default defineConfig({
       command: 'npx next build && npx next start --port 3100',
       cwd: `${ROOT}apps/web`,
       url: `${WEB_URL}/login`,
-      env: { API_URL, NEXT_DIST_DIR: '.next-e2e' },
+      env: { API_URL, NEXT_DIST_DIR: '.next-e2e', NEXT_PUBLIC_SENTRY_DSN: '' }, // no Sentry reports from test runs
       timeout: 240_000,
       reuseExistingServer: !process.env.CI,
     },

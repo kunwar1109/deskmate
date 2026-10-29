@@ -8,6 +8,7 @@ import { UnrecoverableError, Worker } from 'bullmq';
 import { ObjectId } from 'mongodb';
 import { closeDb, connectDb } from './db.js';
 import { ingestDocument, markFailed } from './lib/ingest.js';
+import { flushErrors, reportError } from './lib/monitoring.js';
 import { INGEST_QUEUE, queueOptions, type IngestJobData } from './queue.js';
 
 await connectDb();
@@ -39,11 +40,14 @@ worker.on('failed', (job, err) => {
     JSON.stringify({ event: final ? 'ingest_failed' : 'ingest_retry', documentId: job.data.documentId, attempt: job.attemptsMade, error: err.message }),
   );
   if (final) void markFailed(new ObjectId(job.data.documentId), err.message);
+  // An unreadable file is the customer's problem and the document shows why. Giving up after every retry
+  // (Gemini down, a bug in a parser) is ours.
+  if (final && !(err instanceof UnrecoverableError)) reportError(err, { tags: { stage: 'ingest', documentId: job.data.documentId } });
 });
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
     // close() lets the current job finish before exiting, so a restart doesn't cut an ingestion in half.
-    void worker.close().then(closeDb).then(() => process.exit(0));
+    void worker.close().then(closeDb).then(flushErrors).then(() => process.exit(0));
   });
 }

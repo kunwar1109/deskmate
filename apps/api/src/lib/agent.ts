@@ -228,7 +228,7 @@ export async function streamSupportAgent({ workspaceId, workspaceName, history, 
     },
     onError: (err) => {
       state.errored = true;
-      return describeAiError(err);
+      return describeAiError(err, workspaceId);
     },
     // Hitting the timeout aborts the stream instead of erroring, but for the user it's the same: no answer.
     // isCancelled means the stream was abandoned half-built; it shouldn't happen with the tee below.

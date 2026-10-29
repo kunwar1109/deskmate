@@ -31,6 +31,10 @@ const EnvSchema = z.object({
   // client IP from X-Forwarded-For. 0 locally; on Render or Railway it's usually 1. Too high lets clients fake their IP.
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(0),
   // Where browsers reach this API. Goes into the widget snippet (<script src="PUBLIC_URL/widget.js">).
+  // Sentry error tracking (sentry.io > Settings > Projects > deskmate-api > Client Keys). Optional: without it,
+  // errors only go to the console. Not a secret (it only lets someone send errors in, not read them).
+  // An empty value turns it off too (the E2E servers set SENTRY_DSN= so test runs don't report).
+  SENTRY_DSN: z.union([z.url(), z.literal('')]).optional().transform((dsn) => dsn || undefined),
   PUBLIC_URL: z.url().default('http://localhost:4000').transform((url) => url.replace(/\/$/, '')),
 });
 
