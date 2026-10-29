@@ -1,0 +1,48 @@
+# Render Blueprint for the API (render.com > New > Blueprint, pick this repo).
+# One free web service runs the API, the Socket.io server and the ingestion worker (WORKER_IN_API), because
+# Render's free plan has no background workers. Free services sleep after 15 minutes without traffic and take
+# about a minute to wake up.
+#
+# Deploys come from CI (.github/workflows/ci.yml, job "deploy") through a deploy hook, after the tests pass,
+# so Render's own auto-deploy is off. Render's "after CI checks pass" option would also wait for the evals,
+# which are a quality report, not a gate.
+services:
+  - type: web
+    name: deskmate-api
+    runtime: node
+    plan: free
+    region: singapore # closest Render region to India. Can't be changed later
+    # The repo root, because the lockfile and workspaces live there. -w installs only what the API needs
+    # (not Next.js or Playwright). --include=dev: NODE_ENV=production would otherwise skip Vite, which
+    # builds the widget the API serves at /widget.js.
+    buildCommand: npm ci --include=dev -w apps/api -w apps/widget -w packages/shared && npm run build:widget
+    startCommand: npm run start -w apps/api
+    healthCheckPath: /health
+    autoDeployTrigger: off
+    # On a deploy or restart, SIGTERM lets the current ingestion job finish (src/index.ts). Give it 2 minutes
+    # instead of the default 30 seconds; a job cut off anyway is picked up again by BullMQ's stalled check.
+    maxShutdownDelaySeconds: 120
+    envVars:
+      - key: NODE_ENV
+        value: production # HTTPS-only session cookie
+      - key: WORKER_IN_API
+        value: 'true'
+      - key: TRUST_PROXY_HOPS
+        value: '1' # Render's load balancer
+      - key: MONGODB_DB
+        value: deskmate_prod # same Atlas cluster as dev, separate database
+      - key: QUEUE_PREFIX
+        value: prod # in case dev and production share one Redis
+      - key: JWT_SECRET
+        generateValue: true # 256 random bits, made by Render, never seen by anyone
+      # Asked for when the Blueprint is created. Secrets, so they stay out of this file.
+      - key: MONGODB_URI
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: GOOGLE_GENERATIVE_AI_API_KEY
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: PUBLIC_URL
+        sync: false # this service's own address, e.g. https://deskmate-api.onrender.com

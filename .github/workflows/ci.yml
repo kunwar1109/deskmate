@@ -4,6 +4,7 @@
 # - e2e:    Playwright against the real API, worker and dashboard, with MongoDB (Atlas Local, which has
 #           Vector Search) and Redis as throwaway containers. On pull requests it runs the
 #           tests that don't call Gemini; on main it runs all of them with the Gemini key from repo secrets.
+# - deploy: on main, after both pass: the API to Render and the dashboard to Vercel, each only if its code changed.
 #
 # Actions are pinned to a commit, not a tag: a tag can be moved to point at different code later.
 name: CI
@@ -93,3 +94,48 @@ jobs:
             e2e/playwright-report/
             e2e/test-results/
           retention-days: 14
+
+  deploy:
+    name: Deploy (Render API, Vercel dashboard)
+    needs: [checks, e2e]
+    # Only pushes to main, and only after every test above passed. The evals (evals.yml) don't gate this:
+    # they're a quality report on a nondeterministic model sharing a free-tier quota, and a 54/56 run
+    # shouldn't hold back an unrelated fix.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read # to find the last successful run below
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # full history, to diff against the last deployed commit
+      - name: Deploy what changed since the last successful run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+        run: |
+          # Compare with the last run that got this far, not with the previous push: a newer push cancels an
+          # older run (see concurrency), and that older run's changes still need deploying.
+          last=$(gh run list --workflow ci.yml --branch main --event push --status success --limit 1 --json headSha --jq '.[0].headSha // empty')
+          if [ -n "$last" ] && git cat-file -e "$last^{commit}" 2>/dev/null; then
+            changed=$(git diff --name-only "$last" "$GITHUB_SHA")
+          else
+            changed=everything # no earlier deploy to compare with
+          fi
+
+          deploy() { # name, hook URL, paths that affect it
+            if [ -z "$2" ]; then echo "$1: no deploy hook secret set, skipping"; return; fi
+            if [ "$changed" != everything ] && ! grep -qE "$3" <<<"$changed"; then echo "$1: unchanged"; return; fi
+            echo "$1: deploying"
+            curl --fail-with-body -sS -X POST "$2"
+            echo
+          }
+          # Render deploys exactly this commit (ref=), the one the tests just passed. Vercel's hook builds the
+          # branch's latest commit, which is this one unless a newer push arrived (and that run deploys again).
+          deploy API "${RENDER_DEPLOY_HOOK_URL:+$RENDER_DEPLOY_HOOK_URL&ref=$GITHUB_SHA}" \
+            '^(apps/api/src/|apps/api/package\.json|apps/widget/|packages/shared/|package\.json|package-lock\.json|render\.yaml)'
+          deploy Dashboard "$VERCEL_DEPLOY_HOOK_URL" \
+            '^(apps/web/|packages/shared/|package\.json|package-lock\.json)'
