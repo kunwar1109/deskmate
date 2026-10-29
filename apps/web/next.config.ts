@@ -4,7 +4,9 @@ import type { NextConfig } from "next";
 const API_URL = process.env.API_URL ?? "http://localhost:4000";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // The E2E tests build a copy pointed at their own API (rewrites are fixed at build time), into .next-e2e,
+  // so they never overwrite the normal build in .next.
+  distDir: process.env.NEXT_DIST_DIR ?? ".next",
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {
