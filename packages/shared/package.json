@@ -11,7 +11,8 @@
     "./errors": "./src/errors.ts",
     "./widget": "./src/widget.ts",
     "./realtime": "./src/realtime.ts",
-    "./metrics": "./src/metrics.ts"
+    "./metrics": "./src/metrics.ts",
+    "./api-keys": "./src/api-keys.ts"
   },
   "scripts": {
     "typecheck": "tsc"

@@ -4,6 +4,7 @@
  */
 import { EMBEDDING_DIMENSIONS, VECTOR_INDEX_NAME } from '../src/config.js';
 import {
+  apiKeys,
   chunks,
   closeDb,
   connectDb,
@@ -20,7 +21,7 @@ import {
 await connectDb();
 
 const existing = new Set((await db.listCollections({}, { nameOnly: true }).toArray()).map((c) => c.name));
-for (const name of ['documents', 'chunks', 'users', 'workspaces', 'memberships', 'tickets', 'conversations', 'messages']) {
+for (const name of ['documents', 'chunks', 'users', 'workspaces', 'memberships', 'tickets', 'conversations', 'messages', 'apiKeys']) {
   if (!existing.has(name)) await db.createCollection(name);
 }
 
@@ -40,6 +41,9 @@ await conversations.createIndex({ workspaceId: 1, updatedAt: -1 });
 await messages.createIndex({ conversationId: 1, createdAt: 1 });
 // Dashboard metrics: one workspace's messages in a date range.
 await messages.createIndex({ workspaceId: 1, createdAt: -1 });
+// Every MCP request looks its key up by hash; listing shows one workspace's keys.
+await apiKeys.createIndex({ hash: 1 }, { unique: true });
+await apiKeys.createIndex({ workspaceId: 1, createdAt: -1 });
 console.log('Regular indexes ready.');
 
 const searchIndexes = await chunks.listSearchIndexes(VECTOR_INDEX_NAME).toArray();

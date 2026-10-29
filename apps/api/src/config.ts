@@ -61,4 +61,6 @@ export const RATE_LIMITS = {
   messagesPerIp: { limit: 10, windowSeconds: 60 },
   // Messages per workspace, across all IPs: caps one company's AI spend even under a distributed flood.
   messagesPerWorkspace: { limit: 300, windowSeconds: 60 * 60 },
+  // MCP requests per API key: each search embeds the query with Gemini. Generous for one person's tool use.
+  mcpPerKey: { limit: 30, windowSeconds: 60 },
 } as const;

@@ -94,6 +94,18 @@ export interface MessageRecord {
   createdAt: Date;
 }
 
+// A workspace API key (MCP access). Only the SHA-256 of the key is stored: a leaked database doesn't leak keys.
+export interface ApiKeyRecord {
+  _id?: ObjectId;
+  workspaceId: string;
+  name: string;
+  prefix: string; // the key's first characters, so the owner can tell keys apart
+  hash: string;
+  createdBy: string; // user id
+  createdAt: Date;
+  lastUsedAt?: Date;
+}
+
 export const client = new MongoClient(env.MONGODB_URI);
 
 export const db = client.db(env.MONGODB_DB);
@@ -105,6 +117,7 @@ export const memberships = db.collection<MembershipRecord>('memberships');
 export const tickets = db.collection<TicketRecord>('tickets');
 export const conversations = db.collection<ConversationRecord>('conversations');
 export const messages = db.collection<MessageRecord>('messages');
+export const apiKeys = db.collection<ApiKeyRecord>('apiKeys');
 
 export async function connectDb() {
   await client.connect();

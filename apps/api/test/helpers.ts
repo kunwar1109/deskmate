@@ -3,6 +3,7 @@ import type { DeskmateUIMessage } from '@deskmate/shared/chat';
 import { jest } from '@jest/globals';
 import { createUIMessageStream } from 'ai';
 import type { Express } from 'express';
+import { ObjectId } from 'mongodb';
 import request from 'supertest';
 import type { AgentReply } from '../src/lib/agent.js';
 import type { RateLimitStore } from '../src/lib/rate-limit.js';
@@ -51,10 +52,33 @@ export const fakeReply = (): DeskmateUIMessage => ({
 
 export const agentCalls: string[] = []; // the text of every customer message the fake agent answered
 
+/** Every search the fake retrieval ran, to check which workspace a search was scoped to. */
+export const retrieveCalls: { workspaceId: string; query: string; limit: number | undefined }[] = [];
+
+/**
+ * Stands in for Atlas Vector Search, which the in-memory MongoDB doesn't have. One strong match and one
+ * below MIN_RELEVANCE (0.7), so tests can check that weak matches are filtered out. "fail" throws, like an
+ * embedding call that Gemini refuses.
+ */
+async function fakeRetrieve(workspaceId: string, query: string, limit?: number) {
+  retrieveCalls.push({ workspaceId, query, limit });
+  if (query === 'fail') throw new Error('embedding service down');
+  const chunk = (text: string, score: number) => ({
+    _id: new ObjectId(),
+    documentId: new ObjectId(),
+    documentTitle: 'Help Center',
+    index: 0,
+    text,
+    score,
+  });
+  return [chunk('The Explorer plan costs ₹1,299 per month.', 0.912), chunk('We roast every Monday.', 0.55)];
+}
+
 /**
  * Starts the app for Supertest with the outside world replaced:
  * - the ingest queue (BullMQ on Redis) by mocks the tests can inspect
  * - the support agent (Gemini) by a fake that answers instantly
+ * - vector search (Atlas, plus a Gemini embedding) by a fake with fixed results
  * - the rate limiter's Redis by an in-memory store
  * ES module mocks must be registered before the app is imported, hence the dynamic imports.
  */
@@ -66,6 +90,7 @@ export async function startTestApp() {
     close: jest.fn(async () => {}),
   };
   jest.unstable_mockModule('../src/queue.js', () => ({ ingestQueue: queue, INGEST_QUEUE: 'ingest' }));
+  jest.unstable_mockModule('../src/lib/retrieve.js', () => ({ retrieve: fakeRetrieve, waitUntilSearchable: async () => {} }));
   jest.unstable_mockModule('../src/lib/agent.js', () => ({
     toModelHistory: () => [],
     streamSupportAgent: async ({ userMessage, onEnd }: { userMessage: DeskmateUIMessage; onEnd: (r: AgentReply) => Promise<void> }) => {

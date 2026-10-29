@@ -9,9 +9,11 @@ import { requireAuth } from './lib/auth.js';
 import { HttpError, RateLimitError } from './lib/errors.js';
 import { reportError } from './lib/monitoring.js';
 import { UnsupportedFileError } from './lib/extract.js';
+import { apiKeysRouter } from './routes/api-keys.js';
 import { authRouter } from './routes/auth.js';
 import { conversationsRouter } from './routes/conversations.js';
 import { documentsRouter } from './routes/documents.js';
+import { mcpRouter } from './routes/mcp.js';
 import { metricsRouter } from './routes/metrics.js';
 import { publicRouter } from './routes/public.js';
 import { realtimeRouter } from './routes/realtime.js';
@@ -52,12 +54,15 @@ export function createApp(): Express {
   app.use('/api/auth', authRouter);
   // Public widget API: called from customers' websites, no login. Its own CORS, key and rate-limit checks.
   app.use('/api/public/w/:widgetKey', publicRouter);
+  // MCP clients (Claude, Cursor) authenticate with a workspace API key, not the dashboard's cookie.
+  app.use('/mcp', mcpRouter);
   // Everything below needs a logged-in user. Applying requireAuth here means a new route can't forget it.
   app.use('/api/documents', requireAuth, documentsRouter);
   app.use('/api/conversations', requireAuth, conversationsRouter);
   app.use('/api/widget', requireAuth, widgetRouter);
   app.use('/api/realtime', requireAuth, realtimeRouter);
   app.use('/api/metrics', requireAuth, metricsRouter);
+  app.use('/api/api-keys', requireAuth, apiKeysRouter);
 
   // Express 5 forwards errors from async handlers here automatically.
   const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
